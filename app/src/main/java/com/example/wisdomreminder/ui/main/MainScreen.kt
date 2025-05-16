@@ -404,7 +404,7 @@ fun ActiveWisdomCard(
 
             // Progress indicator
             LinearProgressIndicator(
-                progress = { progress },
+                progress =  progress,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp)

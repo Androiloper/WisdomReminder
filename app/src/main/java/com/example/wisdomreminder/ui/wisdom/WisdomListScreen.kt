@@ -524,7 +524,7 @@ fun ActiveWisdomItem(
                 val progress = (wisdom.currentDay.toFloat() / 21f).coerceIn(0f, 1f)
 
                 androidx.compose.material3.LinearProgressIndicator(
-                    progress = { progress },
+                    progress =  progress ,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 12.dp)

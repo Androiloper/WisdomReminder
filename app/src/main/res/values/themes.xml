@@ -1,5 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Base application theme. -->
+    <style name="Theme.WisdomReminder" parent="Theme.Material3.Dark.NoActionBar">
+        <!-- Primary brand color. -->
+        <item name="colorPrimary">@color/nebula_purple</item>
+        <item name="colorPrimaryVariant">@color/cyber_blue</item>
+        <item name="colorOnPrimary">@color/star_white</item>
+        <!-- Secondary brand color. -->
+        <item name="colorSecondary">@color/electric_green</item>
+        <item name="colorSecondaryVariant">@color/neon_pink</item>
+        <item name="colorOnSecondary">@color/star_white</item>
+        <!-- Status bar color. -->
+        <item name="android:statusBarColor">@color/deep_space</item>
+        <!-- Navigation bar color -->
+        <item name="android:navigationBarColor">@color/deep_space</item>
+        <!-- Background color -->
+        <item name="android:windowBackground">@color/deep_space</item>
+        <!-- Customize your theme here. -->
+        <item name="android:textColor">@color/star_white</item>
+    </style>
 
-    <style name="Theme.WisdomReminder" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>

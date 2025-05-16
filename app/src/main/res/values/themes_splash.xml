@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Splash screen theme -->
+    <style name="Theme.WisdomReminder.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/deep_space</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_wisdom</item>
+        <item name="windowSplashScreenAnimationDuration">1000</item>
+        <item name="postSplashScreenTheme">@style/Theme.WisdomReminder</item>
+    </style>
+</resources>

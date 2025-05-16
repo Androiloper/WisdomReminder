@@ -56,13 +56,24 @@ android {
         kotlinCompilerExtensionVersion = "1.5.1"
     }
 
+    kotlin {
+        sourceSets.all {
+            languageSettings.optIn("kotlin.RequiresOptIn")
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/LICENSE.md"
+            excludes += "/META-INF/LICENSE-notice.md"
         }
     }
 }
 
+hilt {
+    enableAggregatingTask = true
+}
 dependencies {
     // Core Android dependencies
     implementation("androidx.core:core-ktx:1.12.0")
@@ -124,4 +135,16 @@ dependencies {
 
     // Timber for logging
     implementation("com.jakewharton.timber:timber:5.0.1")
+
+    implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // Hilt dependencies
+    implementation("com.google.dagger:hilt-android:2.48")
+    ksp("com.google.dagger:hilt-android-compiler:2.48")
+    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+    implementation("androidx.hilt:hilt-work:1.1.0")
+    ksp("androidx.hilt:hilt-compiler:1.1.0")
+
+    // Add the EntryPoints annotation if needed
+    implementation("com.google.dagger:hilt-android-gradle-plugin:2.48")
 }

@@ -439,7 +439,7 @@ fun WisdomDetailScreen(
 
                                 val dailyProgress = (wisdom.exposuresToday.toFloat() / 21f).coerceIn(0f, 1f)
                                 androidx.compose.material3.LinearProgressIndicator(
-                                    progress = { dailyProgress },
+                                    progress =  dailyProgress ,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(8.dp),
@@ -460,7 +460,7 @@ fun WisdomDetailScreen(
 
                                 val dayProgress = (wisdom.currentDay.toFloat() / 21f).coerceIn(0f, 1f)
                                 androidx.compose.material3.LinearProgressIndicator(
-                                    progress = { dayProgress },
+                                    progress =  dayProgress ,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(8.dp),
