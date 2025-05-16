@@ -1,3 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Wisdom Reminder</string>
+
+    <!-- Service notifications -->
+    <string name="service_notification_title">Wisdom Reminder</string>
+    <string name="service_notification_text">Displaying wisdom reminders throughout the day</string>
+
+    <!-- Permissions -->
+    <string name="permission_overlay_required">Overlay permission is required for wisdom display</string>
+    <string name="permission_notification_required">Notification permission is needed for the service to run properly</string>
+
+    <!-- Main screen -->
+    <string name="app_description">Implementing the 21/21 rule for wisdom internalization</string>
+    <string name="welcome_message">Welcome to Wisdom Reminder</string>
+
+    <!-- Wisdom management -->
+    <string name="add_wisdom">Add New Wisdom</string>
+    <string name="edit_wisdom">Edit Wisdom</string>
+    <string name="delete_wisdom">Delete Wisdom</string>
+    <string name="activate_wisdom">Activate</string>
+
+    <!-- Status descriptions -->
+    <string name="wisdom_active">Active (Day %1$d/21)</string>
+    <string name="wisdom_queued">Queued</string>
+    <string name="wisdom_completed">Completed</string>
+    <string name="wisdom_exposures">%1$d of %2$d exposures today</string>
+    <string name="wisdom_total_exposures">%1$d total exposures</string>
+
+    <!-- Input hints -->
+    <string name="hint_wisdom_text">Enter your wisdom</string>
+    <string name="hint_wisdom_source">Source or reference (optional)</string>
+    <string name="hint_wisdom_category">Category</string>
+
+    <!-- Buttons -->
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+
+    <!-- Widget -->
+    <string name="widget_title">Today\'s Wisdom</string>
+    <string name="widget_empty">No active wisdom</string>
+
+    <!-- Categories -->
+    <string name="category_general">General</string>
+    <string name="category_personal">Personal</string>
+    <string name="category_professional">Professional</string>
+    <string name="category_health">Health</string>
+    <string name="category_relationships">Relationships</string>
+
+    <!-- Section headers -->
+    <string name="section_active_wisdom">Active Wisdom</string>
+    <string name="section_queued_wisdom">Queued Wisdom</string>
+    <string name="section_completed_wisdom">Completed Wisdom</string>
+    <string name="section_statistics">Statistics</string>
+
+    <!-- Statistics -->
+    <string name="stats_active">%1$d Active</string>
+    <string name="stats_completed">%1$d Completed</string>
+    <string name="stats_total_exposures">%1$d Total Exposures</string>
+
+    <!-- Empty states -->
+    <string name="empty_active">No active wisdom.\nSelect a wisdom to activate.</string>
+    <string name="empty_queued">No queued wisdom.\nAdd some wisdom to get started.</string>
+    <string name="empty_completed">No completed wisdom yet.\nComplete the 21-day cycle to see results here.</string>
 </resources>

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_gravity="center">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_margin="24dp"
+        android:padding="24dp"
+        android:background="@drawable/wisdom_card_background">
+
+        <!-- Wisdom header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_wisdom"
+                android:layout_gravity="center_vertical"
+                app:tint="#00F5A0"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="WISDOM REMINDER"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#00F5A0"
+                android:layout_marginStart="8dp"/>
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="21/21 RULE"
+                android:textSize="14sp"
+                android:textColor="#8E44EC"/>
+        </LinearLayout>
+
+        <!-- Glowing divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:background="#8000F5A0"
+            android:layout_marginBottom="20dp"/>
+
+        <!-- Wisdom text with glow effect -->
+        <TextView
+            android:id="@+id/wisdom_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="22sp"
+            android:textColor="#FFFFFF"
+            android:textAlignment="center"
+            android:layout_marginBottom="24dp"
+            android:textStyle="bold"
+            android:shadowColor="#8E44EC"
+            android:shadowDx="0"
+            android:shadowDy="0"
+            android:shadowRadius="10"/>
+
+        <!-- Source/reference with cyber effect -->
+        <TextView
+            android:id="@+id/wisdom_source"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="18sp"
+            android:textStyle="italic"
+            android:textColor="#00A7FE"
+            android:layout_gravity="end"
+            android:background="#50162036"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"/>
+    </LinearLayout>
+</FrameLayout>
