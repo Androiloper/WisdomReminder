@@ -14,6 +14,9 @@ import com.example.wisdomreminder.data.repository.WisdomRepository
 import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.service.WisdomDisplayService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -225,4 +228,40 @@ class MainViewModel @Inject constructor(
             )
         }
     }
+
+
+
+
+sealed class WisdomUiState {
+    object Loading : WisdomUiState()
+    data class Success(
+        val activeWisdom: List<Wisdom> = emptyList(),
+        val queuedWisdom: List<Wisdom> = emptyList(),
+        val completedWisdom: List<Wisdom> = emptyList()
+    ) : WisdomUiState()
+    data class Error(val message: String) : WisdomUiState()
+}
+
+private val _uiState = MutableStateFlow<WisdomUiState>(WisdomUiState.Loading)
+val uiState = _uiState.asStateFlow()
+
+init {
+    viewModelScope.launch {
+        combine(
+            wisdomRepository.getActiveWisdom(),
+            wisdomRepository.getQueuedWisdom(),
+            wisdomRepository.getCompletedWisdom()
+        ) { active, queued, completed ->
+            WisdomUiState.Success(
+                activeWisdom = active,
+                queuedWisdom = queued,
+                completedWisdom = completed
+            )
+        }.catch { error ->
+            _uiState.value = WisdomUiState.Error(error.message ?: "Unknown error")
+        }.collect { state ->
+            _uiState.value = state
+        }
+    }
+}
 }

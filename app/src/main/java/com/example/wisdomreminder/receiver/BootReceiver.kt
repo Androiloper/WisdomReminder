@@ -7,10 +7,14 @@ import android.os.Build
 import android.util.Log
 import com.example.wisdomreminder.service.BootStarterService
 import com.example.wisdomreminder.service.WisdomDisplayService
+import com.example.wisdomreminder.util.WorkScheduler
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+
 
 class BootReceiver : BroadcastReceiver() {
 
+    lateinit var workScheduler: WorkScheduler
     private val TAG = "BootReceiver"
 
     override fun onReceive(context: Context, intent: Intent) {
