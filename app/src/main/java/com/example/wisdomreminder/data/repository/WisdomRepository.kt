@@ -2,11 +2,15 @@ package com.example.wisdomreminder.data.repository
 
 import android.util.Log
 import androidx.room.Transaction
+import com.example.wisdomreminder.BuildConfig
 import com.example.wisdomreminder.data.db.dao.WisdomDao
 import com.example.wisdomreminder.data.db.entities.WisdomEntity
 import com.example.wisdomreminder.model.Wisdom
+import com.example.wisdomreminder.util.mapToCountAndCatch
+import com.example.wisdomreminder.util.mapToWisdomListAndCatch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import java.time.LocalDateTime
@@ -16,178 +20,183 @@ import javax.inject.Singleton
 @Singleton
 class WisdomRepository @Inject constructor(
     private val wisdomDao: WisdomDao
-) {
+) : IWisdomRepository {
     private val TAG = "WisdomRepository"
 
     // Basic CRUD operations
-    fun getAllWisdom(): Flow<List<Wisdom>> =
+    override fun getAllWisdom(): Flow<List<Wisdom>> =
         wisdomDao.getAllWisdom()
-            .map { entities -> entities.map { it.toWisdom() } }
-            .catch { e ->
-                Log.e(TAG, "Error getting all wisdom", e)
-                emit(emptyList())
-            }
+            .mapToWisdomListAndCatch("Error getting all wisdom", TAG)
 
-    suspend fun getWisdomById(id: Long): Wisdom? {
+    override suspend fun getWisdomById(id: Long): Result<Wisdom?> {
         return try {
-            wisdomDao.getWisdomById(id)?.toWisdom()
+            Result.success(wisdomDao.getWisdomById(id)?.toWisdom())
         } catch (e: Exception) {
             Log.e(TAG, "Error getting wisdom by ID: $id", e)
-            null
+            Result.failure(e)
         }
     }
 
-    suspend fun addWisdom(wisdom: Wisdom): Long {
+    override suspend fun addWisdom(wisdom: Wisdom): Result<Long> {
         return try {
-            Log.d(TAG, "Adding wisdom to database: $wisdom")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Adding wisdom to database: $wisdom")
             val entity = WisdomEntity.fromWisdom(wisdom)
-            Log.d(TAG, "Converted to entity with isActive=${entity.isActive}, dateCompleted=${entity.dateCompleted}")
             val id = wisdomDao.insertWisdom(entity)
             Log.d(TAG, "Successfully added wisdom with ID: $id")
 
-            // Verify the item was added correctly by retrieving it
-            val addedItem = wisdomDao.getWisdomById(id)
-            Log.d(TAG, "Retrieved added wisdom: ${addedItem?.text}, isActive=${addedItem?.isActive}, dateCompleted=${addedItem?.dateCompleted}")
+            // Verify in debug mode only
+            if (BuildConfig.DEBUG) {
+                val addedItem = wisdomDao.getWisdomById(id)
+                Log.d(TAG, "Verification - Added wisdom: ${addedItem?.text}, isActive=${addedItem?.isActive}")
+            }
 
-            id
+            Result.success(id)
         } catch (e: Exception) {
             Log.e(TAG, "Error adding wisdom", e)
-            -1L
+            Result.failure(e)
         }
     }
 
-    suspend fun updateWisdom(wisdom: Wisdom) {
-        try {
+    override suspend fun updateWisdom(wisdom: Wisdom): Result<Boolean> {
+        return try {
             val entity = WisdomEntity.fromWisdom(wisdom)
             wisdomDao.updateWisdom(entity)
+            Result.success(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error updating wisdom: ${wisdom.id}", e)
+            Result.failure(e)
         }
     }
 
-    suspend fun deleteWisdom(wisdom: Wisdom) {
-        try {
+    override suspend fun deleteWisdom(wisdom: Wisdom): Result<Boolean> {
+        return try {
             val entity = WisdomEntity.fromWisdom(wisdom)
             wisdomDao.deleteWisdom(entity)
+            Result.success(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error deleting wisdom: ${wisdom.id}", e)
+            Result.failure(e)
         }
     }
 
     // 21/21 Rule specific operations
-    fun getActiveWisdom(): Flow<List<Wisdom>> =
+    override fun getActiveWisdom(): Flow<List<Wisdom>> =
         wisdomDao.getActiveWisdom()
-            .map { entities -> entities.map { it.toWisdom() } }
-            .catch { e ->
-                Log.e(TAG, "Error getting active wisdom", e)
-                emit(emptyList())
-            }
+            .mapToWisdomListAndCatch("Error getting active wisdom", TAG)
 
-    fun getQueuedWisdom(): Flow<List<Wisdom>> =
+    override fun getQueuedWisdom(): Flow<List<Wisdom>> =
         wisdomDao.getQueuedWisdom()
-            .map { entities ->
-                Log.d(TAG, "Mapping ${entities.size} queued wisdom entities")
-                entities.map { it.toWisdom() }
+            .onEach { entities ->
+                if (BuildConfig.DEBUG) Log.d(TAG, "Mapping ${entities.size} queued wisdom entities")
             }
-            .catch { e ->
-                Log.e(TAG, "Error getting queued wisdom", e)
-                emit(emptyList())
-            }
+            .mapToWisdomListAndCatch("Error getting queued wisdom", TAG)
             .onEach { wisdom ->
-                Log.d(TAG, "Emitting ${wisdom.size} queued wisdom items")
+                if (BuildConfig.DEBUG) Log.d(TAG, "Emitting ${wisdom.size} queued wisdom items")
             }
 
-    fun getCompletedWisdom(): Flow<List<Wisdom>> =
+    override fun getCompletedWisdom(): Flow<List<Wisdom>> =
         wisdomDao.getCompletedWisdom()
-            .map { entities -> entities.map { it.toWisdom() } }
-            .catch { e ->
-                Log.e(TAG, "Error getting completed wisdom", e)
-                emit(emptyList())
-            }
+            .mapToWisdomListAndCatch("Error getting completed wisdom", TAG)
 
-
-
-    suspend fun recordExposure(wisdomId: Long) {
-        try {
+    override suspend fun recordExposure(wisdomId: Long): Result<Boolean> {
+        return try {
             wisdomDao.incrementExposure(wisdomId)
             Log.d(TAG, "Recorded exposure for wisdom: $wisdomId")
+            Result.success(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error recording exposure for wisdom: $wisdomId", e)
+            Result.failure(e)
         }
     }
 
-    suspend fun resetDailyExposures() {
-        try {
+    override suspend fun resetDailyExposures(): Result<Boolean> {
+        return try {
             wisdomDao.resetDailyExposures()
             Log.d(TAG, "Reset daily exposures for all active wisdom")
+            Result.success(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error resetting daily exposures", e)
+            Result.failure(e)
         }
     }
 
-    suspend fun completeWisdom() {
-        try {
-            wisdomDao.completeWisdom(LocalDateTime.now())
-            Log.d(TAG, "Marked completed wisdom")
+    override suspend fun completeWisdom(): Result<Boolean> {
+        return try {
+            val completedCount = wisdomDao.completeWisdom(LocalDateTime.now())
+            Log.d(TAG, "Marked $completedCount wisdom items as completed")
+            Result.success(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error marking wisdom as completed", e)
+            Result.failure(e)
         }
     }
 
-    suspend fun activateWisdom(wisdomId: Long) {
-        try {
+    @Transaction
+    override suspend fun activateWisdom(wisdomId: Long): Result<Boolean> {
+        return try {
             // Log the state before activation
-            val beforeWisdom = wisdomDao.getWisdomById(wisdomId)
-            Log.d(TAG, "Before activation: isActive=${beforeWisdom?.isActive}, id=$wisdomId")
+            if (BuildConfig.DEBUG) {
+                val beforeWisdom = wisdomDao.getWisdomById(wisdomId)
+                Log.d(TAG, "Before activation: isActive=${beforeWisdom?.isActive}, id=$wisdomId")
+            }
 
-            // Activate via DAO
+            // Perform the activation
             wisdomDao.activateWisdom(wisdomId, LocalDateTime.now())
 
-            // Verify the change
-            val afterWisdom = wisdomDao.getWisdomById(wisdomId)
-            Log.d(TAG, "After activation: isActive=${afterWisdom?.isActive}, id=$wisdomId")
+            // Verify the change in debug mode
+            if (BuildConfig.DEBUG) {
+                val afterWisdom = wisdomDao.getWisdomById(wisdomId)
+                Log.d(TAG, "After activation: isActive=${afterWisdom?.isActive}, id=$wisdomId")
 
-            if (afterWisdom?.isActive != true) {
-                Log.e(TAG, "Activation failed! Trying fallback method.")
+                // If the activation didn't work, use fallback method
+                if (afterWisdom?.isActive != true) {
+                    Log.w(TAG, "Activation SQL update didn't set isActive=true. Using fallback.")
 
-                // Fallback: Use entity update instead of query
-                val wisdom = wisdomDao.getWisdomById(wisdomId)
-                if (wisdom != null) {
-                    val updatedWisdom = wisdom.copy(
-                        isActive = true,
-                        startDate = LocalDateTime.now(),
-                        currentDay = 1,
-                        exposuresToday = 0,
-                        exposuresTotal = 0,
-                        dateCompleted = null
-                    )
-                    wisdomDao.updateWisdom(updatedWisdom)
-                    Log.d(TAG, "Used fallback update to activate wisdom: $wisdomId")
+                    val wisdom = wisdomDao.getWisdomById(wisdomId)
+                    if (wisdom != null) {
+                        val updatedWisdom = wisdom.copy(
+                            isActive = true,
+                            startDate = LocalDateTime.now(),
+                            currentDay = 1,
+                            exposuresToday = 0,
+                            exposuresTotal = 0,
+                            dateCompleted = null
+                        )
+                        wisdomDao.updateWisdom(updatedWisdom)
+                        Log.d(TAG, "Used fallback update to activate wisdom: $wisdomId")
+                    }
                 }
             }
+
+            Log.d(TAG, "Activated wisdom: $wisdomId")
+            Result.success(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error activating wisdom: $wisdomId", e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getActiveWisdomDirect(): Result<List<Wisdom>> {
+        return try {
+            val activeEntities = wisdomDao.getActiveWisdomDirectly()
+            Log.d(TAG, "Direct query found ${activeEntities.size} active wisdom items")
+            Result.success(activeEntities.map { it.toWisdom() })
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting active wisdom directly", e)
+            Result.failure(e)
         }
     }
 
     // Search and categorization
-    fun searchWisdom(query: String): Flow<List<Wisdom>> =
+    override fun searchWisdom(query: String): Flow<List<Wisdom>> =
         wisdomDao.searchWisdom(query)
-            .map { entities -> entities.map { it.toWisdom() } }
-            .catch { e ->
-                Log.e(TAG, "Error searching wisdom with query: $query", e)
-                emit(emptyList())
-            }
+            .mapToWisdomListAndCatch("Error searching wisdom with query: $query", TAG)
 
-    fun getWisdomByCategory(category: String): Flow<List<Wisdom>> =
+    override fun getWisdomByCategory(category: String): Flow<List<Wisdom>> =
         wisdomDao.getWisdomByCategory(category)
-            .map { entities -> entities.map { it.toWisdom() } }
-            .catch { e ->
-                Log.e(TAG, "Error getting wisdom for category: $category", e)
-                emit(emptyList())
-            }
+            .mapToWisdomListAndCatch("Error getting wisdom for category: $category", TAG)
 
-    fun getAllCategories(): Flow<List<String>> =
+    override fun getAllCategories(): Flow<List<String>> =
         wisdomDao.getAllCategories()
             .catch { e ->
                 Log.e(TAG, "Error getting all categories", e)
@@ -195,38 +204,20 @@ class WisdomRepository @Inject constructor(
             }
 
     // Statistics
-    suspend fun getTotalWisdomCount(): Int {
+    override suspend fun getTotalWisdomCount(): Result<Int> {
         return try {
-            wisdomDao.countWisdom()
+            Result.success(wisdomDao.countWisdom())
         } catch (e: Exception) {
             Log.e(TAG, "Error getting total wisdom count", e)
-            0
+            Result.failure(e)
         }
     }
 
-    fun getActiveWisdomCount(): Flow<Int> =
+    override fun getActiveWisdomCount(): Flow<Int> =
         wisdomDao.getActiveCount()
-            .catch { e ->
-                Log.e(TAG, "Error getting active wisdom count", e)
-                emit(0)
-            }
+            .mapToCountAndCatch("Error getting active wisdom count", TAG)
 
-    fun getCompletedWisdomCount(): Flow<Int> =
+    override fun getCompletedWisdomCount(): Flow<Int> =
         wisdomDao.getCompletedCount()
-            .catch { e ->
-                Log.e(TAG, "Error getting completed wisdom count", e)
-                emit(0)
-            }
-
-    suspend fun getActiveWisdomDirect(): List<Wisdom> {
-        try {
-            val query = "SELECT * FROM wisdom WHERE isActive = 1"
-            val activeEntities = wisdomDao.getActiveWisdomDirectly()
-            Log.d(TAG, "Direct query found ${activeEntities.size} active wisdom items")
-            return activeEntities.map { it.toWisdom() }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting active wisdom directly", e)
-            return emptyList()
-        }
-    }
+            .mapToCountAndCatch("Error getting completed wisdom count", TAG)
 }

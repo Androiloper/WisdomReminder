@@ -1,16 +1,12 @@
 package com.example.wisdomreminder.ui.main
 
-import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
-import com.example.wisdomreminder.data.repository.WisdomRepository
+import com.example.wisdomreminder.data.repository.IWisdomRepository
 import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.service.WisdomDisplayService
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,14 +20,13 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import javax.inject.Inject
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    private val wisdomRepository: WisdomRepository
+    private val wisdomRepository: IWisdomRepository
 ) : ViewModel() {
     private val TAG = "MainViewModel"
 
@@ -72,59 +67,73 @@ class MainViewModel @Inject constructor(
     val events = _events.asSharedFlow()
 
     init {
-        // Log which repository methods are being called
         Log.d(TAG, "MainViewModel initialized, collecting wisdom data")
+        initializeDataCollection()
+    }
 
-        // Collect all wisdom data streams and combine them
+    private fun initializeDataCollection() {
         viewModelScope.launch {
-
             Log.d(TAG, "Starting to collect from repository flows")
             Log.d(TAG, "getActiveWisdom() called")
             Log.d(TAG, "getQueuedWisdom() called")
             Log.d(TAG, "getCompletedWisdom() called")
             Log.d(TAG, "getActiveWisdomCount() called")
 
-            combine(
-                wisdomRepository.getActiveWisdom(),
-                wisdomRepository.getQueuedWisdom(),
-                wisdomRepository.getCompletedWisdom(),
-                wisdomRepository.getActiveWisdomCount(),
-                wisdomRepository.getCompletedWisdomCount(),
-                // Use shareIn to avoid duplicate flow collection
-            ) { active, queued, completed, activeCount, completedCount ->
-                WisdomUiState.Success(
-                    activeWisdom = active,
-                    queuedWisdom = queued,
-                    completedWisdom = completed,
-                    activeCount = activeCount,
-                    completedCount = completedCount,
-                    serviceRunning = WisdomDisplayService.isServiceRunning
-                )
-            }.catch { error ->
-                Log.e(TAG, "Error collecting wisdom data", error)
-                _uiState.value = WisdomUiState.Error(
-                    message = error.message ?: "Unknown error occurred"
-                )
-                _events.emit(UiEvent.Error(error.message ?: "Unknown error occurred"))
-            }.collect { state ->
-                _uiState.value = state
+            try {
+                combine(
+                    wisdomRepository.getActiveWisdom(),
+                    wisdomRepository.getQueuedWisdom(),
+                    wisdomRepository.getCompletedWisdom(),
+                    wisdomRepository.getActiveWisdomCount(),
+                    wisdomRepository.getCompletedWisdomCount()
+                ) { active, queued, completed, activeCount, completedCount ->
+                    WisdomUiState.Success(
+                        activeWisdom = active,
+                        queuedWisdom = queued,
+                        completedWisdom = completed,
+                        activeCount = activeCount,
+                        completedCount = completedCount,
+                        serviceRunning = WisdomDisplayService.isServiceRunning
+                    )
+                }.catch { error ->
+                    Log.e(TAG, "Error collecting wisdom data", error)
+                    _uiState.value = WisdomUiState.Error(
+                        message = error.message ?: "Unknown error occurred"
+                    )
+                    _events.emit(UiEvent.Error(error.message ?: "Unknown error occurred"))
+                }.collect { state ->
+                    _uiState.value = state
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception in data collection", e)
+                _uiState.value = WisdomUiState.Error("Failed to load data: ${e.localizedMessage}")
             }
         }
     }
 
+    // Get wisdom by ID - updated for Result
     fun getWisdomById(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val wisdom = wisdomRepository.getWisdomById(id)
-                _selectedWisdom.value = wisdom
+                val result = wisdomRepository.getWisdomById(id)
+
+                result.fold(
+                    onSuccess = { wisdom ->
+                        _selectedWisdom.value = wisdom
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Error getting wisdom by ID: $id", error)
+                        _events.emit(UiEvent.Error("Could not load wisdom details"))
+                    }
+                )
             } catch (e: Exception) {
-                Log.e(TAG, "Error getting wisdom by ID: $id", e)
-                _events.emit(UiEvent.Error("Could not load wisdom details"))
+                Log.e(TAG, "Exception in getWisdomById", e)
+                _events.emit(UiEvent.Error("An unexpected error occurred"))
             }
         }
     }
 
-    // Enhanced addWisdom with explicit refresh and better logging:
+    // Add new wisdom - updated for Result
     fun addWisdom(text: String, source: String, category: String) {
         if (text.isBlank()) return
 
@@ -136,66 +145,94 @@ class MainViewModel @Inject constructor(
                     source = source,
                     category = category,
                     dateCreated = LocalDateTime.now(),
-                    isActive = false,  // Explicitly set to false to ensure it goes to queued
-                    dateCompleted = null  // Explicitly set to null
+                    isActive = false,
+                    dateCompleted = null
                 )
 
-                val id = wisdomRepository.addWisdom(wisdom)
-                Log.d(TAG, "Wisdom added with ID: $id")
+                val result = wisdomRepository.addWisdom(wisdom)
 
-                if (id > 0) {
-                    _events.emit(UiEvent.WisdomAdded)
-
-                    // IMPORTANT: Force refresh data after adding
-                    Log.d(TAG, "Forcing data refresh after adding wisdom")
-                    refreshData()
-
-                    // Debug to verify data is properly updated
-                    debugDatabaseContents()
-                } else {
-                    _events.emit(UiEvent.Error("Failed to add wisdom"))
-                }
+                result.fold(
+                    onSuccess = { id ->
+                        if (id > 0) {
+                            _events.emit(UiEvent.WisdomAdded)
+                            Log.d(TAG, "Wisdom added successfully with ID: $id")
+                            refreshData()
+                            debugDatabaseContents()
+                        } else {
+                            _events.emit(UiEvent.Error("Failed to add wisdom (invalid ID)"))
+                        }
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Error adding wisdom", error)
+                        _events.emit(UiEvent.Error("Failed to add wisdom: ${error.localizedMessage}"))
+                    }
+                )
             } catch (e: Exception) {
-                Log.e(TAG, "Error adding wisdom", e)
-                _events.emit(UiEvent.Error("Failed to add wisdom: ${e.localizedMessage}"))
+                Log.e(TAG, "Exception in addWisdom", e)
+                _events.emit(UiEvent.Error("An unexpected error occurred while adding wisdom"))
             }
         }
     }
 
+    // Update wisdom - updated for Result
     fun updateWisdom(wisdom: Wisdom) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                wisdomRepository.updateWisdom(wisdom)
-                _events.emit(UiEvent.WisdomUpdated)
+                val result = wisdomRepository.updateWisdom(wisdom)
 
-                // Update selected wisdom if it's the one being edited
-                if (_selectedWisdom.value?.id == wisdom.id) {
-                    _selectedWisdom.value = wisdom
-                }
+                result.fold(
+                    onSuccess = { success ->
+                        _events.emit(UiEvent.WisdomUpdated)
+
+                        // Update selected wisdom if it's the one being edited
+                        if (_selectedWisdom.value?.id == wisdom.id) {
+                            _selectedWisdom.value = wisdom
+                        }
+
+                        refreshData()
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Error updating wisdom: ${wisdom.id}", error)
+                        _events.emit(UiEvent.Error("Failed to update wisdom: ${error.localizedMessage}"))
+                    }
+                )
             } catch (e: Exception) {
-                Log.e(TAG, "Error updating wisdom: ${wisdom.id}", e)
-                _events.emit(UiEvent.Error("Failed to update wisdom: ${e.localizedMessage}"))
+                Log.e(TAG, "Exception in updateWisdom", e)
+                _events.emit(UiEvent.Error("An unexpected error occurred while updating wisdom"))
             }
         }
     }
 
+    // Delete wisdom - updated for Result
     fun deleteWisdom(wisdom: Wisdom) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                wisdomRepository.deleteWisdom(wisdom)
-                _events.emit(UiEvent.WisdomDeleted)
+                val result = wisdomRepository.deleteWisdom(wisdom)
 
-                // Clear selected wisdom if it's the one being deleted
-                if (_selectedWisdom.value?.id == wisdom.id) {
-                    _selectedWisdom.value = null
-                }
+                result.fold(
+                    onSuccess = { success ->
+                        _events.emit(UiEvent.WisdomDeleted)
+
+                        // Clear selected wisdom if it's the one being deleted
+                        if (_selectedWisdom.value?.id == wisdom.id) {
+                            _selectedWisdom.value = null
+                        }
+
+                        refreshData()
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Error deleting wisdom: ${wisdom.id}", error)
+                        _events.emit(UiEvent.Error("Failed to delete wisdom: ${error.localizedMessage}"))
+                    }
+                )
             } catch (e: Exception) {
-                Log.e(TAG, "Error deleting wisdom: ${wisdom.id}", e)
-                _events.emit(UiEvent.Error("Failed to delete wisdom: ${e.localizedMessage}"))
+                Log.e(TAG, "Exception in deleteWisdom", e)
+                _events.emit(UiEvent.Error("An unexpected error occurred while deleting wisdom"))
             }
         }
     }
 
+    // Activate wisdom - updated for Result
     fun activateWisdom(wisdomId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -208,39 +245,45 @@ class MainViewModel @Inject constructor(
                     return@launch
                 }
 
+                // Activate wisdom using Result
+                val result = wisdomRepository.activateWisdom(wisdomId)
 
-                // Activate wisdom
-                wisdomRepository.activateWisdom(wisdomId)
-                _events.emit(UiEvent.WisdomActivated)
+                result.fold(
+                    onSuccess = { success ->
+                        _events.emit(UiEvent.WisdomActivated)
 
-                // Force reload with delay to ensure database has completed the transaction
-                delay(100) // Small delay to ensure transaction completes
-                Log.d(TAG, "Refreshing data after activation")
+                        // Force refresh data with delay
+                        delay(100) // Small delay to ensure transaction completes
+                        Log.d(TAG, "Refreshing data after activation")
+                        refreshData()
 
-                // After activation, check directly what's active in the database
-                val activeItems = wisdomRepository.getActiveWisdomDirect()
-                Log.d(TAG, "After activation, direct query shows ${activeItems.size} active items")
-                activeItems.forEach {
-                    Log.d(TAG, "Active item: id=${it.id}, text='${it.text}', isActive=${it.isActive}")
-                }
+                        // Verify active wisdom status
+                        val activeResult = wisdomRepository.getActiveWisdomDirect()
+                        activeResult.onSuccess { activeItems ->
+                            Log.d(TAG, "Direct verification: ${activeItems.size} active items")
+                            activeItems.forEach {
+                                Log.d(TAG, "Active item: id=${it.id}, text='${it.text.take(20)}...'")
+                            }
+                        }
 
-                refreshData()
-
-                // Debug database state
-                debugDatabaseContents()
-
+                        // Update selected wisdom if it's the one being activated
+                        if (_selectedWisdom.value?.id == wisdomId) {
+                            getWisdomById(wisdomId)
+                        }
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Error activating wisdom: $wisdomId", error)
+                        _events.emit(UiEvent.Error("Failed to activate wisdom: ${error.localizedMessage}"))
+                    }
+                )
             } catch (e: Exception) {
-                Log.e(TAG, "Error activating wisdom: $wisdomId", e)
-                _events.emit(UiEvent.Error("Failed to activate wisdom: ${e.localizedMessage}"))
+                Log.e(TAG, "Exception in activateWisdom", e)
+                _events.emit(UiEvent.Error("An unexpected error occurred while activating wisdom"))
             }
-
-
         }
     }
 
-
-
-    // Service management with error handling
+    // Service management
     fun checkAndRestartService(context: Context) {
         viewModelScope.launch(Dispatchers.Default) {
             try {
@@ -249,13 +292,9 @@ class MainViewModel @Inject constructor(
                 }
 
                 // Update the UI state to reflect service status
-                _uiState.update {
-                    if (it is WisdomUiState.Success) {
-                        it.copy(serviceRunning = WisdomDisplayService.isServiceRunning)
-                    } else {
-                        it
-                    }
-                }
+                _uiState.value = (_uiState.value as? WisdomUiState.Success)?.copy(
+                    serviceRunning = WisdomDisplayService.isServiceRunning
+                ) ?: _uiState.value
             } catch (e: Exception) {
                 Log.e(TAG, "Error checking service status", e)
                 _events.emit(UiEvent.Error("Failed to check service status"))
@@ -275,16 +314,12 @@ class MainViewModel @Inject constructor(
                 context.startService(serviceIntent)
             }
 
-            // Update UI state after a delay to allow service to start
+            // Update UI state after a delay
             viewModelScope.launch {
-                delay(500) // Short delay
-                _uiState.update {
-                    if (it is WisdomUiState.Success) {
-                        it.copy(serviceRunning = WisdomDisplayService.isServiceRunning)
-                    } else {
-                        it
-                    }
-                }
+                delay(500)
+                _uiState.value = (_uiState.value as? WisdomUiState.Success)?.copy(
+                    serviceRunning = WisdomDisplayService.isServiceRunning
+                ) ?: _uiState.value
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start service", e)
@@ -301,16 +336,12 @@ class MainViewModel @Inject constructor(
             }
             context.startService(serviceIntent)
 
-            // Update UI state after a delay to allow service to stop
+            // Update UI state after a delay
             viewModelScope.launch {
-                delay(500) // Short delay
-                _uiState.update {
-                    if (it is WisdomUiState.Success) {
-                        it.copy(serviceRunning = WisdomDisplayService.isServiceRunning)
-                    } else {
-                        it
-                    }
-                }
+                delay(500)
+                _uiState.value = (_uiState.value as? WisdomUiState.Success)?.copy(
+                    serviceRunning = WisdomDisplayService.isServiceRunning
+                ) ?: _uiState.value
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to stop service", e)
@@ -320,10 +351,11 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Helper function for sample data with proper error handling
+    // Sample data method
     fun addSampleWisdom() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                var successCount = 0
                 val sampleWisdom = listOf(
                     Wisdom(
                         text = "What you stay focused on will grow",
@@ -335,15 +367,30 @@ class MainViewModel @Inject constructor(
                         source = "Aristotle",
                         category = "Philosophy"
                     ),
-                    // Other sample wisdom items...
+                    Wisdom(
+                        text = "The quality of your life is determined by the quality of your questions.",
+                        source = "Tony Robbins",
+                        category = "Personal Development"
+                    ),
+                    Wisdom(
+                        text = "Let no corrupt words proceed out of your mouth",
+                        source = "Ephesians 4:29",
+                        category = "General"
+                    )
                 )
 
-                // Use a transaction if possible
-                sampleWisdom.forEach { wisdom ->
-                    wisdomRepository.addWisdom(wisdom)
+                // Add each wisdom item
+                for (wisdom in sampleWisdom) {
+                    val result = wisdomRepository.addWisdom(wisdom)
+                    result.onSuccess { successCount++ }
                 }
 
-                _events.emit(UiEvent.WisdomAdded)
+                if (successCount > 0) {
+                    _events.emit(UiEvent.WisdomAdded)
+                    refreshData()
+                } else {
+                    _events.emit(UiEvent.Error("Failed to add sample wisdom"))
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error adding sample wisdom", e)
                 _events.emit(UiEvent.Error("Failed to add sample wisdom"))
@@ -351,24 +398,22 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Enhanced refreshData to be more reliable:
+    // Data refresh method - updated for Result
     fun refreshData() {
-        Log.d(TAG, "Explicitly refreshing data")
         viewModelScope.launch {
+            Log.d(TAG, "Explicitly refreshing data")
             _uiState.value = WisdomUiState.Loading
 
             try {
-                // Get fresh data directly by calling first() on each flow
-                Log.d(TAG, "Getting fresh data from repository")
+                // Get fresh data directly from each flow
                 val activeItems = wisdomRepository.getActiveWisdom().first()
                 val queuedItems = wisdomRepository.getQueuedWisdom().first()
                 val completedItems = wisdomRepository.getCompletedWisdom().first()
                 val activeCount = wisdomRepository.getActiveWisdomCount().first()
                 val completedCount = wisdomRepository.getCompletedWisdomCount().first()
 
-                Log.d(TAG, "Refresh complete - Active: ${activeItems.size}, Queued: ${queuedItems.size}, Completed: ${completedItems.size}")
+                Log.d(TAG, "Refresh complete - Active: ${activeItems.size}, Queued: ${queuedItems.size}")
 
-                // Update UI state with the fresh data
                 _uiState.value = WisdomUiState.Success(
                     activeWisdom = activeItems,
                     queuedWisdom = queuedItems,
@@ -384,7 +429,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Add this to MainViewModel
+    // Debug method
     fun debugDatabaseContents() {
         viewModelScope.launch {
             try {
@@ -392,27 +437,20 @@ class MainViewModel @Inject constructor(
                 val allWisdom = wisdomRepository.getAllWisdom().first()
                 Log.d(TAG, "DEBUG - All wisdom: ${allWisdom.size} items")
                 allWisdom.forEach { wisdom ->
-                    Log.d(TAG, "Wisdom: ${wisdom.id} - '${wisdom.text}' - Active: ${wisdom.isActive}")
+                    Log.d(TAG, "Wisdom: ${wisdom.id} - '${wisdom.text.take(20)}...' - Active: ${wisdom.isActive}")
                 }
 
-                // Check queued wisdom
-                val queued = wisdomRepository.getQueuedWisdom().first()
-                Log.d(TAG, "DEBUG - Queued wisdom: ${queued.size} items")
-
-                // Check active wisdom
-                val active = wisdomRepository.getActiveWisdom().first()
-                Log.d(TAG, "DEBUG - Active wisdom: ${active.size} items")
-
-                // Check completed wisdom
-                val completed = wisdomRepository.getCompletedWisdom().first()
-                Log.d(TAG, "DEBUG - Completed wisdom: ${completed.size} items")
-
+                // Check active wisdom directly
+                val activeResult = wisdomRepository.getActiveWisdomDirect()
+                activeResult.onSuccess { activeItems ->
+                    Log.d(TAG, "DEBUG - Active wisdom direct: ${activeItems.size} items")
+                    activeItems.forEach {
+                        Log.d(TAG, "Active: ${it.id} - '${it.text.take(20)}...'")
+                    }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error debugging database", e)
             }
         }
     }
-
-
 }
-
