@@ -7,25 +7,34 @@ import android.widget.Toast
 import com.example.wisdomreminder.data.repository.WisdomRepository
 import com.example.wisdomreminder.util.NotificationManager
 import com.example.wisdomreminder.util.WisdomAlarmManager
-import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import javax.inject.Inject
 
-@AndroidEntryPoint
+// Remove the @AndroidEntryPoint annotation
 class AlarmReceiver : BroadcastReceiver() {
-    @Inject
-    lateinit var notificationManager: NotificationManager
 
-    @Inject
-    lateinit var wisdomRepository: WisdomRepository
-
-
+    // Add an EntryPoint interface
+    @dagger.hilt.EntryPoint
+    @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+    interface AlarmReceiverEntryPoint {
+        fun notificationManager(): NotificationManager
+        fun wisdomRepository(): WisdomRepository
+    }
 
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
+
+        // Get dependencies using EntryPoint
+        val entryPoint = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            AlarmReceiverEntryPoint::class.java
+        )
+
+        val notificationManager = entryPoint.notificationManager()
+        val wisdomRepository = entryPoint.wisdomRepository()
 
         if (action == "com.example.wisdomreminder.ALARM_TRIGGER") {
             Timber.d("Alarm triggered")
@@ -35,7 +44,7 @@ class AlarmReceiver : BroadcastReceiver() {
             val alarmTime = intent.getStringExtra("alarm_time") ?: "Scheduled"
 
             GlobalScope.launch {
-                showAlarmNotification(context, wisdomId, isSnooze, alarmTime)
+                showAlarmNotification(context, wisdomId, isSnooze, alarmTime, notificationManager, wisdomRepository)
             }
         }
     }
@@ -44,7 +53,9 @@ class AlarmReceiver : BroadcastReceiver() {
         context: Context,
         wisdomId: Long,
         isSnooze: Boolean,
-        alarmTime: String
+        alarmTime: String,
+        notificationManager: NotificationManager,
+        wisdomRepository: WisdomRepository
     ) {
         // If specific wisdom ID provided (for snooze)
         if (wisdomId != -1L) {
@@ -66,5 +77,3 @@ class AlarmReceiver : BroadcastReceiver() {
         }
     }
 }
-
-

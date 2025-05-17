@@ -1,27 +1,37 @@
 package com.example.wisdomreminder.receiver
 
-
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import com.example.wisdomreminder.data.repository.WisdomRepository
 import com.example.wisdomreminder.util.WisdomAlarmManager
-import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import javax.inject.Inject
 
-@AndroidEntryPoint
+// Remove the @AndroidEntryPoint annotation
 class NotificationReceiver : BroadcastReceiver() {
-    @Inject
-    lateinit var wisdomRepository: WisdomRepository
 
-    @Inject
-    lateinit var wisdomAlarmManager: WisdomAlarmManager
+    // Add an EntryPoint interface
+    @dagger.hilt.EntryPoint
+    @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+    interface NotificationReceiverEntryPoint {
+        fun wisdomRepository(): WisdomRepository
+        fun wisdomAlarmManager(): WisdomAlarmManager
+    }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Get dependencies using EntryPoint
+        val entryPoint = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            NotificationReceiverEntryPoint::class.java
+        )
+
+        val wisdomRepository = entryPoint.wisdomRepository()
+        val wisdomAlarmManager = entryPoint.wisdomAlarmManager()
+
         val action = intent.action
         val wisdomId = intent.getLongExtra("wisdom_id", -1L)
 

@@ -46,6 +46,12 @@ import com.example.wisdomreminder.ui.components.GlassCard
 import com.example.wisdomreminder.ui.main.MainViewModel
 import com.example.wisdomreminder.ui.theme.*
 
+// Non-composable function to check alarm permission
+@androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
+private fun checkExactAlarmPermission(context: Context): Boolean {
+    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    return !alarmManager.canScheduleExactAlarms()
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,9 +72,17 @@ fun SettingsScreen(
 
     var showTimePickerDialog by remember { mutableStateOf(false) }
     var timePickerMode by remember { mutableStateOf("morning") }
-    // Add this state variable at the top of your SettingsScreen Composable
     var showPermissionDialog by remember { mutableStateOf(false) }
 
+    // Handler for alarm toggle with permission check
+    val handleAlarmToggle: (Boolean) -> Unit = { isEnabled ->
+        alarmsEnabled = isEnabled
+        if (isEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (checkExactAlarmPermission(context)) {
+                showPermissionDialog = true
+            }
+        }
+    }
 
     // Background with cosmic theme
     Box(
@@ -198,17 +212,11 @@ fun SettingsScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Enable Alarms
+                        // Enable Alarms - Using the handler function
                         FuturisticToggle(
                             text = "Daily Wisdom Alarms",
                             isChecked = alarmsEnabled,
-                            onCheckedChange = {
-                                alarmsEnabled = it
-                                // Check for exact alarm permission on Android 12+
-                                if (it && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                    checkExactAlarmPermission(context)
-                                }
-                            },
+                            onCheckedChange = handleAlarmToggle,
                             icon = Icons.Rounded.Face // Using a generic alarm icon
                         )
 
@@ -424,6 +432,41 @@ fun SettingsScreen(
                 }
             )
         }
+
+        // Permission dialog
+        if (showPermissionDialog && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            AlertDialog(
+                onDismissRequest = { showPermissionDialog = false },
+                title = { Text("Permission Required") },
+                text = {
+                    Text("This app needs exact alarm permission to schedule wisdom reminders at specific times. Please grant this permission in the next screen.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showPermissionDialog = false
+                            // Direct user to exact alarm settings
+                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                            intent.data = Uri.parse("package:${context.packageName}")
+                            context.startActivity(intent)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NebulaPurple
+                        )
+                    ) {
+                        Text("Open Settings")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPermissionDialog = false }) {
+                        Text("Later")
+                    }
+                },
+                containerColor = GlassSurfaceDark,
+                titleContentColor = ElectricGreen,
+                textContentColor = StarWhite
+            )
+        }
     }
 }
 
@@ -441,7 +484,7 @@ fun SectionHeader(title: String) {
 fun FuturisticToggle(
     text: String,
     isChecked: Boolean,
-    onCheckedChange: @Composable (Boolean) -> Unit,
+    onCheckedChange: (Boolean) -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
     val scale by animateFloatAsState(
@@ -527,8 +570,6 @@ fun TimePickerDialog(
 ) {
     var hour by remember { mutableStateOf(initialHour) }
     var minute by remember { mutableStateOf(initialMinute) }
-    // Add this with your other remember { mutableStateOf() } variables
-    var showPermissionDialog by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -621,49 +662,8 @@ fun TimePickerDialog(
                 }
             }
         }
-
-
-    }
-
-    // Add this alongside any other dialog declarations like your TimePickerDialog
-    if (showPermissionDialog && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        AlertDialog(
-            onDismissRequest = { showPermissionDialog = false },
-            title = { Text("Permission Required") },
-            text = {
-                Text("This app needs exact alarm permission to schedule wisdom reminders at specific times. Please grant this permission in the next screen.")
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showPermissionDialog = false
-                        // Direct user to exact alarm settings
-                        val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                        intent.data = Uri.parse("package:${context.packageName}")
-                        context.startActivity(intent)
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = NebulaPurple
-                    )
-                ) {
-                    Text("Open Settings")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPermissionDialog = false }) {
-                    Text("Later")
-                }
-            },
-            containerColor = GlassSurfaceDark,
-            titleContentColor = ElectricGreen,
-            textContentColor = StarWhite
-        )
     }
 }
-
-
-
-
 
 @Composable
 fun NumberPicker(
@@ -741,18 +741,4 @@ private fun formatTimeDisplay(hour: Int, minute: Int): String {
         else -> hour
     }
     return "$displayHour:${minute.toString().padStart(2, '0')} $amPm"
-}
-
-// Function to check for exact alarm permission
-// Replace your existing checkExactAlarmPermission function with this
-@Composable
-@androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
-private fun checkExactAlarmPermission(context: Context) {
-    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-    // Add this with your other remember { mutableStateOf() } variables
-    var showPermissionDialog by remember { mutableStateOf(false) }
-    if (!alarmManager.canScheduleExactAlarms()) {
-        // Just set the flag - the actual dialog is defined in the composable
-        showPermissionDialog = true
-    }
 }

@@ -1,5 +1,6 @@
 package com.example.wisdomreminder.ui.wisdom
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -51,6 +52,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableIntStateOf
@@ -87,6 +89,7 @@ import com.example.wisdomreminder.ui.theme.NeonPink
 import com.example.wisdomreminder.ui.theme.StarWhite
 import java.time.format.DateTimeFormatter
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WisdomListScreen(
@@ -94,9 +97,34 @@ fun WisdomListScreen(
     onWisdomClick: (Long) -> Unit,
     viewModel: MainViewModel
 ) {
-    val activeWisdom by viewModel.activeWisdom.observeAsState(emptyList())
-    val queuedWisdom by viewModel.queuedWisdom.observeAsState(emptyList())
-    val completedWisdom by viewModel.completedWisdom.observeAsState(emptyList())
+    // Get the uiState from the viewModel
+    val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(uiState) {
+        Log.d("WisdomListScreen", "UI State updated: $uiState")
+    }
+
+
+    // Extract wisdom lists from the current state
+    val (activeWisdom, queuedWisdom, completedWisdom) = when (uiState) {
+        is MainViewModel.WisdomUiState.Success -> {
+            val successState = uiState as MainViewModel.WisdomUiState.Success
+            Triple(successState.activeWisdom, successState.queuedWisdom, successState.completedWisdom)
+        }
+        else -> Triple(emptyList(), emptyList(), emptyList())
+    }
+
+    // Add debug logging
+    LaunchedEffect(uiState) {
+        when (uiState) {
+            is MainViewModel.WisdomUiState.Success -> {
+                val state = uiState as MainViewModel.WisdomUiState.Success
+                Log.d("WisdomListScreen", "State updated: active=${state.activeWisdom.size}, " +
+                        "queued=${state.queuedWisdom.size}, completed=${state.completedWisdom.size}")
+            }
+            else -> Log.d("WisdomListScreen", "State: $uiState")
+        }
+    }
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
@@ -300,6 +328,14 @@ fun WisdomListScreen(
                 }
             )
         }
+    }
+
+    // Add this somewhere in your UI
+    Button(
+        onClick = { viewModel.debugDatabaseContents() },
+        colors = ButtonDefaults.buttonColors(containerColor = NeonPink)
+    ) {
+        Text("Debug DB")
     }
 }
 
@@ -842,4 +878,6 @@ fun CompletedWisdomItem(
             }
         }
     }
+
+
 }

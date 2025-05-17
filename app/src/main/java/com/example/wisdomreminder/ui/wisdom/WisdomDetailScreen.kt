@@ -46,6 +46,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
@@ -90,19 +91,33 @@ fun WisdomDetailScreen(
     wisdomId: Long,
     viewModel: MainViewModel
 ) {
-    // Find the wisdom in one of the lists
-    val activeWisdom by viewModel.activeWisdom.observeAsState(emptyList())
-    val queuedWisdom by viewModel.queuedWisdom.observeAsState(emptyList())
-    val completedWisdom by viewModel.completedWisdom.observeAsState(emptyList())
+    // Get the uiState from the viewModel
+    val uiState by viewModel.uiState.collectAsState()
 
-    // Combine all wisdom lists
+    // Extract wisdom lists from the current state
+    val wisdomLists = when (uiState) {
+        is MainViewModel.WisdomUiState.Success -> {
+            val state = uiState as MainViewModel.WisdomUiState.Success
+            Triple(state.activeWisdom, state.queuedWisdom, state.completedWisdom)
+        }
+        else -> Triple(emptyList(), emptyList(), emptyList())
+    }
+
+    // Destructure the lists
+    val (activeWisdom, queuedWisdom, completedWisdom) = wisdomLists
+
+    // Now proceed with the rest of your code
     val allWisdom = activeWisdom + queuedWisdom + completedWisdom
     val wisdom = allWisdom.find { it.id == wisdomId }
+
+    // Fetch the wisdom details if not already loaded
+    LaunchedEffect(wisdomId) {
+        viewModel.getWisdomById(wisdomId)
+    }
 
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
-
     // Background with cosmic theme
     Box(
         modifier = Modifier

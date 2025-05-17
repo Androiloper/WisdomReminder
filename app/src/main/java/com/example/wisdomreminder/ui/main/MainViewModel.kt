@@ -72,8 +72,18 @@ class MainViewModel @Inject constructor(
     val events = _events.asSharedFlow()
 
     init {
+        // Log which repository methods are being called
+        Log.d(TAG, "MainViewModel initialized, collecting wisdom data")
+
         // Collect all wisdom data streams and combine them
         viewModelScope.launch {
+
+            Log.d(TAG, "Starting to collect from repository flows")
+            Log.d(TAG, "getActiveWisdom() called")
+            Log.d(TAG, "getQueuedWisdom() called")
+            Log.d(TAG, "getCompletedWisdom() called")
+            Log.d(TAG, "getActiveWisdomCount() called")
+
             combine(
                 wisdomRepository.getActiveWisdom(),
                 wisdomRepository.getQueuedWisdom(),
@@ -339,6 +349,35 @@ class MainViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(TAG, "Error refreshing data", e)
                 _uiState.value = WisdomUiState.Error("Failed to refresh data: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    // Add this to MainViewModel
+    fun debugDatabaseContents() {
+        viewModelScope.launch {
+            try {
+                // Check all wisdom in the database
+                val allWisdom = wisdomRepository.getAllWisdom().first()
+                Log.d(TAG, "DEBUG - All wisdom: ${allWisdom.size} items")
+                allWisdom.forEach { wisdom ->
+                    Log.d(TAG, "Wisdom: ${wisdom.id} - '${wisdom.text}' - Active: ${wisdom.isActive}")
+                }
+
+                // Check queued wisdom
+                val queued = wisdomRepository.getQueuedWisdom().first()
+                Log.d(TAG, "DEBUG - Queued wisdom: ${queued.size} items")
+
+                // Check active wisdom
+                val active = wisdomRepository.getActiveWisdom().first()
+                Log.d(TAG, "DEBUG - Active wisdom: ${active.size} items")
+
+                // Check completed wisdom
+                val completed = wisdomRepository.getCompletedWisdom().first()
+                Log.d(TAG, "DEBUG - Completed wisdom: ${completed.size} items")
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error debugging database", e)
             }
         }
     }
