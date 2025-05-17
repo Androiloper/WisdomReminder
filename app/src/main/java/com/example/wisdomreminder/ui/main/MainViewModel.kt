@@ -124,20 +124,34 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    // Enhanced addWisdom with explicit refresh and better logging:
     fun addWisdom(text: String, source: String, category: String) {
         if (text.isBlank()) return
 
+        Log.d(TAG, "Adding wisdom: $text, $source, $category")
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val wisdom = Wisdom(
                     text = text,
                     source = source,
                     category = category,
-                    dateCreated = LocalDateTime.now()
+                    dateCreated = LocalDateTime.now(),
+                    isActive = false,  // Explicitly set to false to ensure it goes to queued
+                    dateCompleted = null  // Explicitly set to null
                 )
+
                 val id = wisdomRepository.addWisdom(wisdom)
+                Log.d(TAG, "Wisdom added with ID: $id")
+
                 if (id > 0) {
                     _events.emit(UiEvent.WisdomAdded)
+
+                    // IMPORTANT: Force refresh data after adding
+                    Log.d(TAG, "Forcing data refresh after adding wisdom")
+                    refreshData()
+
+                    // Debug to verify data is properly updated
+                    debugDatabaseContents()
                 } else {
                     _events.emit(UiEvent.Error("Failed to add wisdom"))
                 }
@@ -317,35 +331,32 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    // Enhanced refreshData to be more reliable:
     fun refreshData() {
+        Log.d(TAG, "Explicitly refreshing data")
         viewModelScope.launch {
             _uiState.value = WisdomUiState.Loading
 
             try {
-                // Re-init the data collection
-                // This will be collected by the existing Flow collectors
-                // and _uiState will be updated when new data is available
+                // Get fresh data directly by calling first() on each flow
+                Log.d(TAG, "Getting fresh data from repository")
+                val activeItems = wisdomRepository.getActiveWisdom().first()
+                val queuedItems = wisdomRepository.getQueuedWisdom().first()
+                val completedItems = wisdomRepository.getCompletedWisdom().first()
+                val activeCount = wisdomRepository.getActiveWisdomCount().first()
+                val completedCount = wisdomRepository.getCompletedWisdomCount().first()
 
-                // If you need to explicitly force a refresh:
-                combine(
-                    wisdomRepository.getActiveWisdom(),
-                    wisdomRepository.getQueuedWisdom(),
-                    wisdomRepository.getCompletedWisdom(),
-                    wisdomRepository.getActiveWisdomCount(),
-                    wisdomRepository.getCompletedWisdomCount()
-                ) { active, queued, completed, activeCount, completedCount ->
-                    WisdomUiState.Success(
-                        activeWisdom = active,
-                        queuedWisdom = queued,
-                        completedWisdom = completed,
-                        activeCount = activeCount,
-                        completedCount = completedCount,
-                        serviceRunning = WisdomDisplayService.isServiceRunning
-                    )
-                }.first() // Use first() to get just one emission
-                    .let { state ->
-                        _uiState.value = state
-                    }
+                Log.d(TAG, "Refresh complete - Active: ${activeItems.size}, Queued: ${queuedItems.size}, Completed: ${completedItems.size}")
+
+                // Update UI state with the fresh data
+                _uiState.value = WisdomUiState.Success(
+                    activeWisdom = activeItems,
+                    queuedWisdom = queuedItems,
+                    completedWisdom = completedItems,
+                    activeCount = activeCount,
+                    completedCount = completedCount,
+                    serviceRunning = WisdomDisplayService.isServiceRunning
+                )
             } catch (e: Exception) {
                 Log.e(TAG, "Error refreshing data", e)
                 _uiState.value = WisdomUiState.Error("Failed to refresh data: ${e.localizedMessage}")

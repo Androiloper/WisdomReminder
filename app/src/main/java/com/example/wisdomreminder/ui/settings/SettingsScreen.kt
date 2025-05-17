@@ -41,6 +41,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.wisdomreminder.R
 import com.example.wisdomreminder.ui.components.GlassCard
 import com.example.wisdomreminder.ui.main.MainViewModel
@@ -57,10 +58,13 @@ private fun checkExactAlarmPermission(context: Context): Boolean {
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
-    viewModel: MainViewModel
+
+   // viewModel: SettingsViewModel = hiltViewModel()
+
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+
 
     // Settings state
     var notificationsEnabled by remember { mutableStateOf(true) }

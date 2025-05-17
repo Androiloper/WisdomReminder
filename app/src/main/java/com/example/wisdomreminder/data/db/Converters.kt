@@ -1,5 +1,6 @@
 package com.example.wisdomreminder.data.db
 
+import android.util.Log
 import androidx.room.TypeConverter
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -21,6 +22,7 @@ class Converters {
             try {
                 LocalDateTime.parse(it, formatter)
             } catch (e: Exception) {
+                Log.e("Converters", "Failed to parse LocalDateTime: $value", e)
                 null // Handle parsing errors gracefully
             }
         }

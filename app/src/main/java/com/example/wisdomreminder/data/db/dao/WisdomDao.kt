@@ -78,7 +78,7 @@ interface WisdomDao {
     suspend fun completeWisdom(completionDate: LocalDateTime = LocalDateTime.now())
 
     // Activate a wisdom
-    @Query("UPDATE wisdom SET isActive = 1, startDate = :startDate, currentDay = 1, exposuresToday = 0, exposuresTotal = 0 WHERE id = :wisdomId")
+    @Query("UPDATE wisdom SET isActive = 1, startDate = :startDate, currentDay = 1, exposuresToday = 0, exposuresTotal = 0, dateCompleted = NULL WHERE id = :wisdomId")
     suspend fun activateWisdom(wisdomId: Long, startDate: LocalDateTime = LocalDateTime.now())
 
     // Search

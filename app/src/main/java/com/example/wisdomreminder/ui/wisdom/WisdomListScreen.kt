@@ -325,6 +325,9 @@ fun WisdomListScreen(
                 onSave = { text, source, category ->
                     viewModel.addWisdom(text, source, category)
                     showAddWisdomDialog = false
+
+
+                    viewModel.refreshData()
                 }
             )
         }
@@ -391,6 +394,12 @@ fun QueuedWisdomList(
     onActivate: (Long) -> Unit,
     searchQuery: String
 ) {
+    LaunchedEffect(wisdom) {
+        Log.d("WisdomListScreen", "QueuedWisdomList received ${wisdom.size} items")
+        wisdom.forEach {
+            Log.d("WisdomListScreen", "Queued item: ID=${it.id}, Text='${it.text}'")
+        }
+    }
     val filteredWisdom = if (searchQuery.isEmpty()) {
         wisdom
     } else {
@@ -415,7 +424,10 @@ fun QueuedWisdomList(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            itemsIndexed(filteredWisdom) { index, item ->
+            itemsIndexed(
+                items = filteredWisdom,
+                key = { _, item -> item.id }  // Use ID as a stable key
+            ) { index, item ->
                 QueuedWisdomItem(
                     wisdom = item,
                     onClick = { onWisdomClick(item.id) },
@@ -500,13 +512,15 @@ fun ActiveWisdomItem(
     onClick: () -> Unit,
     animationDelay: Int = 0
 ) {
-    var visible by remember { mutableStateOf(false) }
+    var visible by remember { mutableStateOf(true) }
     val dateFormatter = DateTimeFormatter.ofPattern("MMM dd, yyyy")
 
     LaunchedEffect(wisdom.id) {
-        visible = false
-        kotlinx.coroutines.delay(animationDelay.toLong())
-        visible = true
+        if (animationDelay > 0) {
+            visible = false
+            kotlinx.coroutines.delay(animationDelay.toLong())
+            visible = true
+        }
     }
 
     AnimatedVisibility(

@@ -7,6 +7,7 @@ import com.example.wisdomreminder.model.Wisdom
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import java.time.LocalDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,8 +38,17 @@ class WisdomRepository @Inject constructor(
 
     suspend fun addWisdom(wisdom: Wisdom): Long {
         return try {
+            Log.d(TAG, "Adding wisdom to database: $wisdom")
             val entity = WisdomEntity.fromWisdom(wisdom)
-            wisdomDao.insertWisdom(entity)
+            Log.d(TAG, "Converted to entity with isActive=${entity.isActive}, dateCompleted=${entity.dateCompleted}")
+            val id = wisdomDao.insertWisdom(entity)
+            Log.d(TAG, "Successfully added wisdom with ID: $id")
+
+            // Verify the item was added correctly by retrieving it
+            val addedItem = wisdomDao.getWisdomById(id)
+            Log.d(TAG, "Retrieved added wisdom: ${addedItem?.text}, isActive=${addedItem?.isActive}, dateCompleted=${addedItem?.dateCompleted}")
+
+            id
         } catch (e: Exception) {
             Log.e(TAG, "Error adding wisdom", e)
             -1L
@@ -74,10 +84,16 @@ class WisdomRepository @Inject constructor(
 
     fun getQueuedWisdom(): Flow<List<Wisdom>> =
         wisdomDao.getQueuedWisdom()
-            .map { entities -> entities.map { it.toWisdom() } }
+            .map { entities ->
+                Log.d(TAG, "Mapping ${entities.size} queued wisdom entities")
+                entities.map { it.toWisdom() }
+            }
             .catch { e ->
                 Log.e(TAG, "Error getting queued wisdom", e)
                 emit(emptyList())
+            }
+            .onEach { wisdom ->
+                Log.d(TAG, "Emitting ${wisdom.size} queued wisdom items")
             }
 
     fun getCompletedWisdom(): Flow<List<Wisdom>> =
@@ -87,6 +103,8 @@ class WisdomRepository @Inject constructor(
                 Log.e(TAG, "Error getting completed wisdom", e)
                 emit(emptyList())
             }
+
+
 
     suspend fun recordExposure(wisdomId: Long) {
         try {

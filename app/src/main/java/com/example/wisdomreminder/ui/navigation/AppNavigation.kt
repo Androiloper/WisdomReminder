@@ -1,6 +1,7 @@
 package com.example.wisdomreminder.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -10,8 +11,11 @@ import androidx.navigation.navArgument
 import com.example.wisdomreminder.ui.main.MainScreen
 import com.example.wisdomreminder.ui.main.MainViewModel
 import com.example.wisdomreminder.ui.settings.SettingsScreen
+import com.example.wisdomreminder.ui.settings.SettingsViewModel
 import com.example.wisdomreminder.ui.wisdom.WisdomDetailScreen
 import com.example.wisdomreminder.ui.wisdom.WisdomListScreen
+
+import hilt_aggregated_deps._com_example_wisdomreminder_ui_settings_SettingsViewModel_HiltModules_BindsModule
 
 sealed class Screen(val route: String) {
     object Main : Screen("main")
@@ -25,7 +29,8 @@ sealed class Screen(val route: String) {
 @Composable
 fun AppNavigation(
     navController: NavHostController = rememberNavController(),
-    mainViewModel: MainViewModel
+    mainViewModel: MainViewModel,
+    //settingsViewModel: SettingsViewModel = hiltViewModel()  // Add this parameter
 ) {
     NavHost(
         navController = navController,
@@ -43,7 +48,7 @@ fun AppNavigation(
         composable(Screen.Settings.route) {
             SettingsScreen(
                 onBackClick = { navController.popBackStack() },
-                viewModel = mainViewModel
+                //viewModel  = settingsViewModel
             )
         }
 
