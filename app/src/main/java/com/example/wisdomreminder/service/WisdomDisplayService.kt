@@ -26,6 +26,7 @@ import androidx.core.app.NotificationCompat
 import com.example.wisdomreminder.R
 import com.example.wisdomreminder.data.repository.WisdomRepository
 import com.example.wisdomreminder.ui.main.MainActivity
+import com.example.wisdomreminder.util.SwipeDismissTouchListener
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +54,7 @@ class WisdomDisplayService : Service() {
         // Flag to track if service is running
         @Volatile
         var isServiceRunning = false
+            private set
     }
 
     @Inject
@@ -64,6 +66,7 @@ class WisdomDisplayService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val screenReceiver = ScreenReceiver()
     private var lastDisplayTime = 0L // Track when the last wisdom was shown
+    private var animator: ValueAnimator? = null  // Store animator reference for cleanup
 
     override fun onCreate() {
         super.onCreate()
@@ -194,6 +197,9 @@ class WisdomDisplayService : Service() {
 
     private fun displayWisdom(text: String, source: String) {
         try {
+            // Cancel any existing animation
+            animator?.cancel()
+
             // Remove any existing view first
             if (wisdomView != null) {
                 try {
@@ -246,25 +252,55 @@ class WisdomDisplayService : Service() {
                 }
             }
 
+            // Set up swipe to dismiss using the standalone class
+            val swipeListener = SwipeDismissTouchListener(
+                wisdomView!!,
+                object : SwipeDismissTouchListener.DismissCallbacks {
+                    override fun onDismiss(view: View, direction: Int) {
+                        // When swiped, hide the wisdom
+                        hideWisdom()
+                    }
+                }
+            )
+
+            // Apply the swipe listener to the root view
+            wisdomView?.setOnTouchListener(swipeListener)
+
+            // Add a small TextView hint about swiping
+            try {
+                val swipeHint = TextView(this)
+                swipeHint.text = "← Swipe to dismiss →"
+                swipeHint.setTextColor(resources.getColor(R.color.nebula_purple, null))
+                swipeHint.textSize = 12f
+                swipeHint.alpha = 0.8f
+                swipeHint.gravity = Gravity.CENTER
+
+                // Note: You may need to add this to your layout if it's not already included
+                // For now, we'll just use the main wisdom view
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding swipe hint: ${e.message}")
+            }
+
             Log.d(TAG, "Adding wisdom view to window")
             windowManager.addView(wisdomView, params)
 
             // Add animation effect
             val textView = wisdomText
-            val valueAnimator = ValueAnimator.ofFloat(0.8f, 1.0f)
-            valueAnimator.duration = 2000
-            valueAnimator.repeatCount = ValueAnimator.INFINITE
-            valueAnimator.repeatMode = ValueAnimator.REVERSE
-            valueAnimator.addUpdateListener { animator ->
-                val value = animator.animatedValue as Float
-                textView?.alpha = value
+            animator = ValueAnimator.ofFloat(0.8f, 1.0f).apply {
+                duration = 2000
+                repeatCount = ValueAnimator.INFINITE
+                repeatMode = ValueAnimator.REVERSE
+                addUpdateListener { animator ->
+                    val value = animator.animatedValue as Float
+                    textView?.alpha = value
+                }
+                start()
             }
-            valueAnimator.start()
 
             // Auto-hide after 20 seconds
             serviceScope.launch {
                 delay(20000)
-                valueAnimator.cancel()
+                animator?.cancel()
                 hideWisdom()
             }
         } catch (e: Exception) {
@@ -275,6 +311,10 @@ class WisdomDisplayService : Service() {
 
     private fun hideWisdom() {
         try {
+            // Cancel animation if any
+            animator?.cancel()
+            animator = null
+
             wisdomView?.let { view ->
                 mainHandler.post {
                     try {
