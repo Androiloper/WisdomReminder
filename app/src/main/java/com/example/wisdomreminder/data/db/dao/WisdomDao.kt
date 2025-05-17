@@ -78,9 +78,9 @@ interface WisdomDao {
     suspend fun completeWisdom(completionDate: LocalDateTime = LocalDateTime.now())
 
     // Activate a wisdom
+    @Transaction
     @Query("UPDATE wisdom SET isActive = 1, startDate = :startDate, currentDay = 1, exposuresToday = 0, exposuresTotal = 0, dateCompleted = NULL WHERE id = :wisdomId")
-    suspend fun activateWisdom(wisdomId: Long, startDate: LocalDateTime = LocalDateTime.now())
-
+    suspend fun activateWisdom(wisdomId: Long, startDate: LocalDateTime = LocalDateTime.now()): Int
     // Search
     @Query("SELECT * FROM wisdom WHERE text LIKE '%' || :query || '%' OR source LIKE '%' || :query || '%' OR category LIKE '%' || :query || '%'")
     fun searchWisdom(query: String): Flow<List<WisdomEntity>>
@@ -103,4 +103,7 @@ interface WisdomDao {
 
     @Query("SELECT COUNT(*) FROM wisdom WHERE dateCompleted IS NOT NULL")
     fun getCompletedCount(): Flow<Int>
+
+    @Query("SELECT * FROM wisdom WHERE isActive = 1")
+    suspend fun getActiveWisdomDirectly(): List<WisdomEntity>
 }

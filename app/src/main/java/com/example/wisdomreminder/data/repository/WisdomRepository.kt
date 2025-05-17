@@ -1,6 +1,7 @@
 package com.example.wisdomreminder.data.repository
 
 import android.util.Log
+import androidx.room.Transaction
 import com.example.wisdomreminder.data.db.dao.WisdomDao
 import com.example.wisdomreminder.data.db.entities.WisdomEntity
 import com.example.wisdomreminder.model.Wisdom
@@ -135,8 +136,35 @@ class WisdomRepository @Inject constructor(
 
     suspend fun activateWisdom(wisdomId: Long) {
         try {
-            wisdomDao.activateWisdom(wisdomId)
-            Log.d(TAG, "Activated wisdom: $wisdomId")
+            // Log the state before activation
+            val beforeWisdom = wisdomDao.getWisdomById(wisdomId)
+            Log.d(TAG, "Before activation: isActive=${beforeWisdom?.isActive}, id=$wisdomId")
+
+            // Activate via DAO
+            wisdomDao.activateWisdom(wisdomId, LocalDateTime.now())
+
+            // Verify the change
+            val afterWisdom = wisdomDao.getWisdomById(wisdomId)
+            Log.d(TAG, "After activation: isActive=${afterWisdom?.isActive}, id=$wisdomId")
+
+            if (afterWisdom?.isActive != true) {
+                Log.e(TAG, "Activation failed! Trying fallback method.")
+
+                // Fallback: Use entity update instead of query
+                val wisdom = wisdomDao.getWisdomById(wisdomId)
+                if (wisdom != null) {
+                    val updatedWisdom = wisdom.copy(
+                        isActive = true,
+                        startDate = LocalDateTime.now(),
+                        currentDay = 1,
+                        exposuresToday = 0,
+                        exposuresTotal = 0,
+                        dateCompleted = null
+                    )
+                    wisdomDao.updateWisdom(updatedWisdom)
+                    Log.d(TAG, "Used fallback update to activate wisdom: $wisdomId")
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error activating wisdom: $wisdomId", e)
         }
@@ -189,4 +217,16 @@ class WisdomRepository @Inject constructor(
                 Log.e(TAG, "Error getting completed wisdom count", e)
                 emit(0)
             }
+
+    suspend fun getActiveWisdomDirect(): List<Wisdom> {
+        try {
+            val query = "SELECT * FROM wisdom WHERE isActive = 1"
+            val activeEntities = wisdomDao.getActiveWisdomDirectly()
+            Log.d(TAG, "Direct query found ${activeEntities.size} active wisdom items")
+            return activeEntities.map { it.toWisdom() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting active wisdom directly", e)
+            return emptyList()
+        }
+    }
 }

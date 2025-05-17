@@ -199,26 +199,46 @@ class MainViewModel @Inject constructor(
     fun activateWisdom(wisdomId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Check if we already have too many active wisdom items
+                Log.d(TAG, "ViewModel: Activating wisdom with ID: $wisdomId")
+
+                // Check active count (existing code)
                 val currentActiveCount = (uiState.value as? WisdomUiState.Success)?.activeCount ?: 0
                 if (currentActiveCount >= 3) {
                     _events.emit(UiEvent.Error("You can only have up to 3 active wisdom items at once"))
                     return@launch
                 }
 
+
+                // Activate wisdom
                 wisdomRepository.activateWisdom(wisdomId)
                 _events.emit(UiEvent.WisdomActivated)
 
-                // Update selected wisdom if it's the one being activated
-                if (_selectedWisdom.value?.id == wisdomId) {
-                    getWisdomById(wisdomId) // Refresh the data
+                // Force reload with delay to ensure database has completed the transaction
+                delay(100) // Small delay to ensure transaction completes
+                Log.d(TAG, "Refreshing data after activation")
+
+                // After activation, check directly what's active in the database
+                val activeItems = wisdomRepository.getActiveWisdomDirect()
+                Log.d(TAG, "After activation, direct query shows ${activeItems.size} active items")
+                activeItems.forEach {
+                    Log.d(TAG, "Active item: id=${it.id}, text='${it.text}', isActive=${it.isActive}")
                 }
+
+                refreshData()
+
+                // Debug database state
+                debugDatabaseContents()
+
             } catch (e: Exception) {
                 Log.e(TAG, "Error activating wisdom: $wisdomId", e)
                 _events.emit(UiEvent.Error("Failed to activate wisdom: ${e.localizedMessage}"))
             }
+
+
         }
     }
+
+
 
     // Service management with error handling
     fun checkAndRestartService(context: Context) {
@@ -392,4 +412,7 @@ class MainViewModel @Inject constructor(
             }
         }
     }
+
+
 }
+
