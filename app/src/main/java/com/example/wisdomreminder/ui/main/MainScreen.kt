@@ -194,6 +194,27 @@ fun MainScreen(
                                 titleContentColor = StarWhite
                             ),
                             actions = {
+                                // Add START/STOP button for the service
+                                Button(
+                                    onClick = {
+                                        if (state.serviceRunning) {
+                                            viewModel.stopWisdomService(context)
+                                        } else {
+                                            viewModel.checkAndRestartService(context)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (state.serviceRunning)
+                                            NeonPink.copy(alpha = 0.8f)
+                                        else
+                                            ElectricGreen.copy(alpha = 0.8f)
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.padding(end = 8.dp)
+                                ) {
+                                    Text(if (state.serviceRunning) "STOP" else "START")
+                                }
+
                                 IconButton(onClick = onSettingsClick) {
                                     Icon(
                                         imageVector = Icons.Default.Settings,
@@ -384,60 +405,6 @@ fun MainScreen(
                                     .padding(top = 16.dp)
                             ) {
                                 Text("ADD SAMPLE WISDOM")
-                            }
-                        }
-
-                        // Service status indicator
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (state.serviceRunning)
-                                    ElectricGreen.copy(alpha = 0.2f)
-                                else
-                                    NeonPink.copy(alpha = 0.2f)
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(12.dp)
-                                        .clip(CircleShape)
-                                        .background(if (state.serviceRunning) ElectricGreen else NeonPink)
-                                )
-
-                                Text(
-                                    text = if (state.serviceRunning)
-                                        "Wisdom service running"
-                                    else
-                                        "Wisdom service stopped",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (state.serviceRunning) ElectricGreen else NeonPink,
-                                    modifier = Modifier.padding(start = 8.dp)
-                                )
-
-                                Spacer(modifier = Modifier.weight(1f))
-
-                                TextButton(
-                                    onClick = {
-                                        if (state.serviceRunning) {
-                                            viewModel.stopWisdomService(context)
-                                        } else {
-                                            viewModel.checkAndRestartService(context)
-                                        }
-                                    },
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = if (state.serviceRunning) StarWhite else NeonPink
-                                    )
-                                ) {
-                                    Text(if (state.serviceRunning) "STOP" else "START")
-                                }
                             }
                         }
 
