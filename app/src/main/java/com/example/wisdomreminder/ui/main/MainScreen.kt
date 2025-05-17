@@ -44,6 +44,8 @@ import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
 import com.example.wisdomreminder.ui.wisdom.QueuedWisdomItem
 import java.time.format.DateTimeFormatter
 import com.example.wisdomreminder.ui.components.ActiveWisdomCard
+import com.example.wisdomreminder.ui.components.SwipeableWisdomCards
+import com.example.wisdomreminder.ui.main.MainViewModel
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -117,6 +119,12 @@ fun MainScreen(
                 .fillMaxSize()
                 .alpha(0.1f)
                 .blur(60.dp)
+        )
+
+        // Add cosmic particles animation
+        CosmicAnimations.CosmicParticlesEffect(
+            particleCount = 30,
+            modifier = Modifier.fillMaxSize()
         )
 
 
@@ -239,6 +247,22 @@ fun MainScreen(
                                 modifier = Modifier.weight(1f)
                             )
                         }
+
+                        // NEW ADDITION: Swipeable Wisdom Cards
+                        // Combine all wisdom for swiping through
+                        val allWisdom = state.activeWisdom + state.queuedWisdom + state.completedWisdom
+
+                        Text(
+                            text = "WISDOM EXPLORER",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = NeonPink,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+
+                        SwipeableWisdomCards(
+                            allWisdom = allWisdom,
+                            onCardClick = { wisdom -> onWisdomClick(wisdom.id) }
+                        )
 
                         // Main Section - Featured Active Wisdom
                         Text(
