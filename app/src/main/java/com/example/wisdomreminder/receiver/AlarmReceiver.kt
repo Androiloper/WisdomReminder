@@ -59,10 +59,12 @@ class AlarmReceiver : BroadcastReceiver() {
     ) {
         // If specific wisdom ID provided (for snooze)
         if (wisdomId != -1L) {
-            val wisdom = wisdomRepository.getWisdomById(wisdomId)
-            if (wisdom != null) {
-                notificationManager.showAlarmNotification(wisdom, alarmTime)
-                return
+            val wisdomResult = wisdomRepository.getWisdomById(wisdomId)
+            wisdomResult.onSuccess { wisdom ->
+                if (wisdom != null) {
+                    notificationManager.showAlarmNotification(wisdom, alarmTime)
+                    return
+                }
             }
         }
 

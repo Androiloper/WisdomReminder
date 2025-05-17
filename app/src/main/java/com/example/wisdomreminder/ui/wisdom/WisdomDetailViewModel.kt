@@ -44,15 +44,24 @@ class WisdomDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = DetailState.Loading
             try {
-                val wisdom = wisdomRepository.getWisdomById(id)
-                if (wisdom != null) {
-                    _state.value = DetailState.Success(wisdom)
-                } else {
-                    _state.value = DetailState.Error("Wisdom not found")
-                    _events.emit(DetailEvent.Error("Wisdom not found"))
-                }
+                val wisdomResult = wisdomRepository.getWisdomById(id)
+                wisdomResult.fold(
+                    onSuccess = { wisdom ->
+                        if (wisdom != null) {
+                            _state.value = DetailState.Success(wisdom)
+                        } else {
+                            _state.value = DetailState.Error("Wisdom not found")
+                            _events.emit(DetailEvent.Error("Wisdom not found"))
+                        }
+                    },
+                    onFailure = { e ->
+                        Log.e(TAG, "Error loading wisdom: $id", e)
+                        _state.value = DetailState.Error("Failed to load wisdom")
+                        _events.emit(DetailEvent.Error("Failed to load wisdom: ${e.localizedMessage}"))
+                    }
+                )
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading wisdom: $id", e)
+                Log.e(TAG, "Unexpected error in loadWisdom: $id", e)
                 _state.value = DetailState.Error("Failed to load wisdom")
                 _events.emit(DetailEvent.Error("Failed to load wisdom: ${e.localizedMessage}"))
             }

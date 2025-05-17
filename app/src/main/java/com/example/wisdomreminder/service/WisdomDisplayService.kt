@@ -183,15 +183,40 @@ class WisdomDisplayService : Service() {
         lastDisplayTime = currentTime
 
         // Get the wisdom by ID
-        val wisdom = wisdomRepository.getWisdomById(wisdomId)
-        if (wisdom != null) {
-            // Record exposure
-            wisdomRepository.recordExposure(wisdomId)
+        wisdomRepository.getWisdomById(wisdomId).onSuccess { wisdom ->
+            if (wisdom != null) {
+                // Record exposure
+                wisdomRepository.recordExposure(wisdomId)
 
-            // Display the wisdom
-            displayWisdom(wisdom.text, wisdom.source)
-        } else {
-            Log.e(TAG, "Wisdom not found: $wisdomId")
+                // Display the wisdom
+                displayWisdom(wisdom.text, wisdom.source)
+            } else {
+                Log.e(TAG, "Wisdom not found: $wisdomId")
+            }
+        }.onFailure { error ->
+            Log.e(TAG, "Error retrieving wisdom: $wisdomId", error)
+        }
+    }
+
+    private suspend fun showRandomWisdom() {
+        try {
+            // Get all active wisdom
+            val activeWisdom = wisdomRepository.getActiveWisdom().first()
+
+            if (activeWisdom.isNotEmpty()) {
+                // Choose a random wisdom
+                val randomWisdom = activeWisdom.random()
+
+                // Record exposure
+                wisdomRepository.recordExposure(randomWisdom.id).onSuccess { success ->
+                    // Display it
+                    displayWisdom(randomWisdom.text, randomWisdom.source)
+                }
+            } else {
+                Log.d(TAG, "No active wisdom to display")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error showing random wisdom: ${e.message}", e)
         }
     }
 
@@ -379,25 +404,5 @@ class WisdomDisplayService : Service() {
         }
     }
 
-    private suspend fun showRandomWisdom() {
-        try {
-            // Get all active wisdom
-            val activeWisdom = wisdomRepository.getActiveWisdom().first()
 
-            if (activeWisdom.isNotEmpty()) {
-                // Choose a random wisdom
-                val randomWisdom = activeWisdom.random()
-
-                // Record exposure
-                wisdomRepository.recordExposure(randomWisdom.id)
-
-                // Display it
-                displayWisdom(randomWisdom.text, randomWisdom.source)
-            } else {
-                Log.d(TAG, "No active wisdom to display")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error showing random wisdom: ${e.message}", e)
-        }
-    }
 }
