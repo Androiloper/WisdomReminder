@@ -1,13 +1,21 @@
 package com.example.wisdomreminder.data.db.entities
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverters
 import com.example.wisdomreminder.data.db.Converters
 import com.example.wisdomreminder.model.Wisdom
 import java.time.LocalDateTime
 
-@Entity(tableName = "wisdom")
+@Entity(
+    tableName = "wisdom",
+    indices = [
+        Index("isActive"), // Improve queries that filter by active status
+        Index("category"), // Improve category-based queries
+        Index("dateCreated") // Improve sorting by creation date
+    ]
+)
 @TypeConverters(Converters::class)
 data class WisdomEntity(
     @PrimaryKey val id: Long = System.currentTimeMillis(),

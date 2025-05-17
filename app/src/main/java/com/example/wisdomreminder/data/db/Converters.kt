@@ -17,6 +17,22 @@ class Converters {
 
     @TypeConverter
     fun toLocalDateTime(value: String?): LocalDateTime? {
-        return value?.let { LocalDateTime.parse(it, formatter) }
+        return value?.let {
+            try {
+                LocalDateTime.parse(it, formatter)
+            } catch (e: Exception) {
+                null // Handle parsing errors gracefully
+            }
+        }
+    }
+    // Add converters for new types if needed
+    @TypeConverter
+    fun fromList(list: List<String>?): String? {
+        return list?.joinToString(",")
+    }
+
+    @TypeConverter
+    fun toList(value: String?): List<String> {
+        return value?.split(",")?.filter { it.isNotEmpty() } ?: emptyList()
     }
 }

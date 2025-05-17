@@ -2,11 +2,13 @@ package com.example.wisdomreminder.work
 
 import android.content.Context
 import android.content.Intent
+import android.preference.PreferenceManager
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.wisdomreminder.data.repository.WisdomRepository
 import com.example.wisdomreminder.service.WisdomDisplayService
+import com.example.wisdomreminder.util.NotificationManager
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
@@ -21,11 +23,19 @@ import timber.log.Timber
 class ReminderWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val wisdomRepository: WisdomRepository
+    private val wisdomRepository: WisdomRepository,
+    private val notificationManager: NotificationManager
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
+            // Check if notifications are enabled
+            val prefs = PreferenceManager.getDefaultSharedPreferences(applicationContext)
+            if (!prefs.getBoolean("notifications_enabled", true)) {
+                Timber.d("Notifications disabled, skipping")
+                return@withContext Result.success()
+            }
+
             // Get active wisdom entries
             val activeWisdom = wisdomRepository.getActiveWisdom().first()
 
@@ -36,15 +46,8 @@ class ReminderWorker @AssistedInject constructor(
                 // Take the top priority wisdom
                 val wisdomToShow = prioritizedWisdom.first()
 
-                // Increment exposure counter
-                wisdomRepository.recordExposure(wisdomToShow.id)
-
-                // Send intent to service to display the wisdom
-                val displayIntent = Intent(applicationContext, WisdomDisplayService::class.java).apply {
-                    action = WisdomDisplayService.ACTION_DISPLAY_WISDOM
-                    putExtra(WisdomDisplayService.EXTRA_WISDOM_ID, wisdomToShow.id)
-                }
-                applicationContext.startService(displayIntent)
+                // Show notification
+                notificationManager.showWisdomNotification(wisdomToShow)
 
                 Timber.d("Displayed wisdom: ${wisdomToShow.text.take(20)}... (${wisdomToShow.exposuresToday + 1}/${wisdomToShow.currentDay}/21)")
             } else {

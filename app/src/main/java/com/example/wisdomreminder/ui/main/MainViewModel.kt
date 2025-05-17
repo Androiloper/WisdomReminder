@@ -14,12 +14,17 @@ import com.example.wisdomreminder.data.repository.WisdomRepository
 import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.service.WisdomDisplayService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import javax.inject.Inject
@@ -30,35 +35,89 @@ class MainViewModel @Inject constructor(
 ) : ViewModel() {
     private val TAG = "MainViewModel"
 
-    // Wisdom lists by status
-    val activeWisdom = wisdomRepository.getActiveWisdom().asLiveData()
-    val queuedWisdom = wisdomRepository.getQueuedWisdom().asLiveData()
-    val completedWisdom = wisdomRepository.getCompletedWisdom().asLiveData()
-
-    // Currently editing wisdom
-    private val _editingWisdom = MutableLiveData<Wisdom?>(null)
-    val editingWisdom: LiveData<Wisdom?> = _editingWisdom
-
-    // Service status tracking
-    private val _serviceRunning = MutableLiveData<Boolean>(false)
-    val serviceRunning: LiveData<Boolean> = _serviceRunning
-
-    // Statistics
-    val activeWisdomCount = wisdomRepository.getActiveWisdomCount().asLiveData()
-    val completedWisdomCount = wisdomRepository.getCompletedWisdomCount().asLiveData()
-
-    init {
-        // Initialize service status
-        _serviceRunning.value = WisdomDisplayService.isServiceRunning
+    // UI state using sealed class pattern
+    sealed class WisdomUiState {
+        object Loading : WisdomUiState()
+        data class Success(
+            val activeWisdom: List<Wisdom> = emptyList(),
+            val queuedWisdom: List<Wisdom> = emptyList(),
+            val completedWisdom: List<Wisdom> = emptyList(),
+            val activeCount: Int = 0,
+            val completedCount: Int = 0,
+            val serviceRunning: Boolean = false
+        ) : WisdomUiState()
+        data class Error(val message: String) : WisdomUiState()
     }
 
-    /**
-     * Add a new wisdom item
-     */
+    // Private mutable state
+    private val _uiState = MutableStateFlow<WisdomUiState>(WisdomUiState.Loading)
+
+    // Public immutable state
+    val uiState = _uiState.asStateFlow()
+
+    // Single wisdom for detail view
+    private val _selectedWisdom = MutableStateFlow<Wisdom?>(null)
+    val selectedWisdom = _selectedWisdom.asStateFlow()
+
+    // Events/actions
+    sealed class UiEvent {
+        object WisdomAdded : UiEvent()
+        object WisdomDeleted : UiEvent()
+        object WisdomUpdated : UiEvent()
+        object WisdomActivated : UiEvent()
+        data class Error(val message: String) : UiEvent()
+    }
+
+    private val _events = MutableSharedFlow<UiEvent>()
+    val events = _events.asSharedFlow()
+
+    init {
+        // Collect all wisdom data streams and combine them
+        viewModelScope.launch {
+            combine(
+                wisdomRepository.getActiveWisdom(),
+                wisdomRepository.getQueuedWisdom(),
+                wisdomRepository.getCompletedWisdom(),
+                wisdomRepository.getActiveWisdomCount(),
+                wisdomRepository.getCompletedWisdomCount(),
+                // Use shareIn to avoid duplicate flow collection
+            ) { active, queued, completed, activeCount, completedCount ->
+                WisdomUiState.Success(
+                    activeWisdom = active,
+                    queuedWisdom = queued,
+                    completedWisdom = completed,
+                    activeCount = activeCount,
+                    completedCount = completedCount,
+                    serviceRunning = WisdomDisplayService.isServiceRunning
+                )
+            }.catch { error ->
+                Log.e(TAG, "Error collecting wisdom data", error)
+                _uiState.value = WisdomUiState.Error(
+                    message = error.message ?: "Unknown error occurred"
+                )
+                _events.emit(UiEvent.Error(error.message ?: "Unknown error occurred"))
+            }.collect { state ->
+                _uiState.value = state
+            }
+        }
+    }
+
+    fun getWisdomById(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val wisdom = wisdomRepository.getWisdomById(id)
+                _selectedWisdom.value = wisdom
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting wisdom by ID: $id", e)
+                _events.emit(UiEvent.Error("Could not load wisdom details"))
+            }
+        }
+    }
+
     fun addWisdom(text: String, source: String, category: String) {
         if (text.isBlank()) return
 
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val wisdom = Wisdom(
                     text = text,
@@ -67,96 +126,99 @@ class MainViewModel @Inject constructor(
                     dateCreated = LocalDateTime.now()
                 )
                 val id = wisdomRepository.addWisdom(wisdom)
-                Log.d(TAG, "Added wisdom with ID: $id")
+                if (id > 0) {
+                    _events.emit(UiEvent.WisdomAdded)
+                } else {
+                    _events.emit(UiEvent.Error("Failed to add wisdom"))
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error adding wisdom", e)
+                _events.emit(UiEvent.Error("Failed to add wisdom: ${e.localizedMessage}"))
             }
         }
     }
 
-    /**
-     * Delete a wisdom item
-     */
-    fun deleteWisdom(wisdom: Wisdom) {
-        viewModelScope.launch {
-            try {
-                wisdomRepository.deleteWisdom(wisdom)
-                Log.d(TAG, "Deleted wisdom: ${wisdom.id}")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error deleting wisdom", e)
-            }
-        }
-    }
-
-    /**
-     * Update an existing wisdom
-     */
     fun updateWisdom(wisdom: Wisdom) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 wisdomRepository.updateWisdom(wisdom)
-                Log.d(TAG, "Updated wisdom: ${wisdom.id}")
-                // Clear editing state
-                _editingWisdom.value = null
+                _events.emit(UiEvent.WisdomUpdated)
+
+                // Update selected wisdom if it's the one being edited
+                if (_selectedWisdom.value?.id == wisdom.id) {
+                    _selectedWisdom.value = wisdom
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Error updating wisdom", e)
+                Log.e(TAG, "Error updating wisdom: ${wisdom.id}", e)
+                _events.emit(UiEvent.Error("Failed to update wisdom: ${e.localizedMessage}"))
             }
         }
     }
 
-    /**
-     * Set the wisdom that's being edited
-     */
-    fun setEditingWisdom(wisdom: Wisdom?) {
-        _editingWisdom.value = wisdom
+    fun deleteWisdom(wisdom: Wisdom) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                wisdomRepository.deleteWisdom(wisdom)
+                _events.emit(UiEvent.WisdomDeleted)
+
+                // Clear selected wisdom if it's the one being deleted
+                if (_selectedWisdom.value?.id == wisdom.id) {
+                    _selectedWisdom.value = null
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deleting wisdom: ${wisdom.id}", e)
+                _events.emit(UiEvent.Error("Failed to delete wisdom: ${e.localizedMessage}"))
+            }
+        }
     }
 
-    /**
-     * Activate a wisdom to start the 21/21 rule
-     */
     fun activateWisdom(wisdomId: Long) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
+                // Check if we already have too many active wisdom items
+                val currentActiveCount = (uiState.value as? WisdomUiState.Success)?.activeCount ?: 0
+                if (currentActiveCount >= 3) {
+                    _events.emit(UiEvent.Error("You can only have up to 3 active wisdom items at once"))
+                    return@launch
+                }
+
                 wisdomRepository.activateWisdom(wisdomId)
-                Log.d(TAG, "Activated wisdom: $wisdomId")
+                _events.emit(UiEvent.WisdomActivated)
+
+                // Update selected wisdom if it's the one being activated
+                if (_selectedWisdom.value?.id == wisdomId) {
+                    getWisdomById(wisdomId) // Refresh the data
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Error activating wisdom", e)
+                Log.e(TAG, "Error activating wisdom: $wisdomId", e)
+                _events.emit(UiEvent.Error("Failed to activate wisdom: ${e.localizedMessage}"))
             }
         }
     }
 
-    /**
-     * Record an exposure manually
-     */
-    fun recordExposure(wisdomId: Long) {
-        viewModelScope.launch {
-            try {
-                wisdomRepository.recordExposure(wisdomId)
-                Log.d(TAG, "Recorded exposure for wisdom: $wisdomId")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error recording exposure", e)
-            }
-        }
-    }
-
-    /**
-     * Check and restart the wisdom display service if needed
-     */
+    // Service management with error handling
     fun checkAndRestartService(context: Context) {
-        viewModelScope.launch {
-            // Update internal tracking
-            _serviceRunning.value = WisdomDisplayService.isServiceRunning
+        viewModelScope.launch(Dispatchers.Default) {
+            try {
+                if (!WisdomDisplayService.isServiceRunning) {
+                    startWisdomService(context)
+                }
 
-            // If service is not running but should be, restart it
-            if (!WisdomDisplayService.isServiceRunning) {
-                startWisdomService(context)
+                // Update the UI state to reflect service status
+                _uiState.update {
+                    if (it is WisdomUiState.Success) {
+                        it.copy(serviceRunning = WisdomDisplayService.isServiceRunning)
+                    } else {
+                        it
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking service status", e)
+                _events.emit(UiEvent.Error("Failed to check service status"))
             }
         }
     }
 
-    /**
-     * Start the wisdom display service
-     */
     private fun startWisdomService(context: Context) {
         try {
             val serviceIntent = Intent(context, WisdomDisplayService::class.java).apply {
@@ -168,100 +230,116 @@ class MainViewModel @Inject constructor(
             } else {
                 context.startService(serviceIntent)
             }
-            Log.d(TAG, "Started wisdom service")
-            _serviceRunning.value = true
+
+            // Update UI state after a delay to allow service to start
+            viewModelScope.launch {
+                delay(500) // Short delay
+                _uiState.update {
+                    if (it is WisdomUiState.Success) {
+                        it.copy(serviceRunning = WisdomDisplayService.isServiceRunning)
+                    } else {
+                        it
+                    }
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start service", e)
-            _serviceRunning.value = false
+            viewModelScope.launch {
+                _events.emit(UiEvent.Error("Failed to start wisdom service"))
+            }
         }
     }
 
-    /**
-     * Stop the wisdom display service
-     */
     fun stopWisdomService(context: Context) {
         try {
             val serviceIntent = Intent(context, WisdomDisplayService::class.java).apply {
                 action = WisdomDisplayService.ACTION_STOP_SERVICE
             }
             context.startService(serviceIntent)
-            Log.d(TAG, "Requested service stop")
-            _serviceRunning.value = false
+
+            // Update UI state after a delay to allow service to stop
+            viewModelScope.launch {
+                delay(500) // Short delay
+                _uiState.update {
+                    if (it is WisdomUiState.Success) {
+                        it.copy(serviceRunning = WisdomDisplayService.isServiceRunning)
+                    } else {
+                        it
+                    }
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to stop service", e)
+            viewModelScope.launch {
+                _events.emit(UiEvent.Error("Failed to stop wisdom service"))
+            }
         }
     }
 
-    /**
-     * Add sample wisdom entries for testing
-     */
+    // Helper function for sample data with proper error handling
     fun addSampleWisdom() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val sampleWisdom = listOf(
+                    Wisdom(
+                        text = "What you stay focused on will grow",
+                        source = "Law of Attraction",
+                        category = "Personal Development"
+                    ),
+                    Wisdom(
+                        text = "We are what we repeatedly do. Excellence, then, is not an act, but a habit.",
+                        source = "Aristotle",
+                        category = "Philosophy"
+                    ),
+                    // Other sample wisdom items...
+                )
+
+                // Use a transaction if possible
+                sampleWisdom.forEach { wisdom ->
+                    wisdomRepository.addWisdom(wisdom)
+                }
+
+                _events.emit(UiEvent.WisdomAdded)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding sample wisdom", e)
+                _events.emit(UiEvent.Error("Failed to add sample wisdom"))
+            }
+        }
+    }
+
+    fun refreshData() {
         viewModelScope.launch {
-            addWisdom(
-                "What you stay focused on will grow",
-                "Law of Attraction",
-                "Personal Development"
-            )
+            _uiState.value = WisdomUiState.Loading
 
-            addWisdom(
-                "We are what we repeatedly do. Excellence, then, is not an act, but a habit.",
-                "Aristotle",
-                "Philosophy"
-            )
+            try {
+                // Re-init the data collection
+                // This will be collected by the existing Flow collectors
+                // and _uiState will be updated when new data is available
 
-            addWisdom(
-                "The quality of your life is determined by the quality of your questions",
-                "Tony Robbins",
-                "Personal Development"
-            )
-
-            addWisdom(
-                "You don't have to be great to start, but you have to start to be great",
-                "Zig Ziglar",
-                "Motivation"
-            )
-
-            addWisdom(
-                "Knowledge is knowing what to say. Wisdom is knowing when to say it.",
-                "Anonymous",
-                "Communication"
-            )
+                // If you need to explicitly force a refresh:
+                combine(
+                    wisdomRepository.getActiveWisdom(),
+                    wisdomRepository.getQueuedWisdom(),
+                    wisdomRepository.getCompletedWisdom(),
+                    wisdomRepository.getActiveWisdomCount(),
+                    wisdomRepository.getCompletedWisdomCount()
+                ) { active, queued, completed, activeCount, completedCount ->
+                    WisdomUiState.Success(
+                        activeWisdom = active,
+                        queuedWisdom = queued,
+                        completedWisdom = completed,
+                        activeCount = activeCount,
+                        completedCount = completedCount,
+                        serviceRunning = WisdomDisplayService.isServiceRunning
+                    )
+                }.first() // Use first() to get just one emission
+                    .let { state ->
+                        _uiState.value = state
+                    }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error refreshing data", e)
+                _uiState.value = WisdomUiState.Error("Failed to refresh data: ${e.localizedMessage}")
+            }
         }
     }
-
-
-
-
-sealed class WisdomUiState {
-    object Loading : WisdomUiState()
-    data class Success(
-        val activeWisdom: List<Wisdom> = emptyList(),
-        val queuedWisdom: List<Wisdom> = emptyList(),
-        val completedWisdom: List<Wisdom> = emptyList()
-    ) : WisdomUiState()
-    data class Error(val message: String) : WisdomUiState()
-}
-
-private val _uiState = MutableStateFlow<WisdomUiState>(WisdomUiState.Loading)
-val uiState = _uiState.asStateFlow()
-
-init {
-    viewModelScope.launch {
-        combine(
-            wisdomRepository.getActiveWisdom(),
-            wisdomRepository.getQueuedWisdom(),
-            wisdomRepository.getCompletedWisdom()
-        ) { active, queued, completed ->
-            WisdomUiState.Success(
-                activeWisdom = active,
-                queuedWisdom = queued,
-                completedWisdom = completed
-            )
-        }.catch { error ->
-            _uiState.value = WisdomUiState.Error(error.message ?: "Unknown error")
-        }.collect { state ->
-            _uiState.value = state
-        }
-    }
-}
 }

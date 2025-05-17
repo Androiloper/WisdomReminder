@@ -1,46 +1,30 @@
 package com.example.wisdomreminder.ui.settings
 
+import android.app.AlarmManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Notifications
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -56,17 +40,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.example.wisdomreminder.R
 import com.example.wisdomreminder.ui.components.GlassCard
 import com.example.wisdomreminder.ui.main.MainViewModel
-import com.example.wisdomreminder.ui.theme.CosmicBlack
-import com.example.wisdomreminder.ui.theme.CyberBlue
-import com.example.wisdomreminder.ui.theme.DeepSpace
-import com.example.wisdomreminder.ui.theme.ElectricGreen
-import com.example.wisdomreminder.ui.theme.GlassSurface
-import com.example.wisdomreminder.ui.theme.NebulaPurple
-import com.example.wisdomreminder.ui.theme.NeonPink
-import com.example.wisdomreminder.ui.theme.StarWhite
+import com.example.wisdomreminder.ui.theme.*
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,11 +57,18 @@ fun SettingsScreen(
     val scrollState = rememberScrollState()
 
     // Settings state
-    var displayOnScreenOn by remember { mutableStateOf(true) }
-    var displayOnUnlock by remember { mutableStateOf(true) }
     var notificationsEnabled by remember { mutableStateOf(true) }
-    var dailyReminderEnabled by remember { mutableStateOf(true) }
-    var maxActiveWisdom by remember { mutableStateOf(3) }
+    var alarmsEnabled by remember { mutableStateOf(true) }
+    var morningAlarmEnabled by remember { mutableStateOf(true) }
+    var morningAlarmTime by remember { mutableStateOf("08:00") }
+    var eveningAlarmEnabled by remember { mutableStateOf(true) }
+    var eveningAlarmTime by remember { mutableStateOf("20:00") }
+
+    var showTimePickerDialog by remember { mutableStateOf(false) }
+    var timePickerMode by remember { mutableStateOf("morning") }
+    // Add this state variable at the top of your SettingsScreen Composable
+    var showPermissionDialog by remember { mutableStateOf(false) }
+
 
     // Background with cosmic theme
     Box(
@@ -167,10 +153,10 @@ fun SettingsScreen(
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Display Settings Section
-                SectionHeader(title = "DISPLAY OPTIONS")
+                // Notification Settings Section
+                SectionHeader(title = "NOTIFICATION SETTINGS")
 
-                // Display Settings Card
+                // Notification Settings Card
                 GlassCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -180,36 +166,29 @@ fun SettingsScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Display on Screen On
+                        // Enable Notifications
                         FuturisticToggle(
-                            text = "Display on Screen On",
-                            isChecked = displayOnScreenOn,
-                            onCheckedChange = { displayOnScreenOn = it },
-                            icon = Icons.Rounded.Notifications
-                        )
-
-                        // Display on Unlock
-                        FuturisticToggle(
-                            text = "Display on Unlock",
-                            isChecked = displayOnUnlock,
-                            onCheckedChange = { displayOnUnlock = it },
-                            icon = Icons.Rounded.Notifications
-                        )
-
-                        // Push Notifications
-                        FuturisticToggle(
-                            text = "Show Notifications",
+                            text = "Show Wisdom Notifications",
                             isChecked = notificationsEnabled,
                             onCheckedChange = { notificationsEnabled = it },
                             icon = Icons.Rounded.Notifications
                         )
+
+                        if (notificationsEnabled) {
+                            Text(
+                                text = "Regular notifications will show wisdom throughout the day",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = StarWhite.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(start = 40.dp)
+                            )
+                        }
                     }
                 }
 
-                // 21/21 Rule Settings Section
-                SectionHeader(title = "21/21 RULE SETTINGS")
+                // Alarm Settings Section
+                SectionHeader(title = "DAILY REMINDERS")
 
-                // 21/21 Settings Card
+                // Alarm Settings Card
                 GlassCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -219,66 +198,142 @@ fun SettingsScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Daily Reminder
+                        // Enable Alarms
                         FuturisticToggle(
-                            text = "Daily Reminder at 8:00 AM",
-                            isChecked = dailyReminderEnabled,
-                            onCheckedChange = { dailyReminderEnabled = it },
-                            icon = Icons.Rounded.Notifications
+                            text = "Daily Wisdom Alarms",
+                            isChecked = alarmsEnabled,
+                            onCheckedChange = {
+                                alarmsEnabled = it
+                                // Check for exact alarm permission on Android 12+
+                                if (it && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    checkExactAlarmPermission(context)
+                                }
+                            },
+                            icon = Icons.Rounded.Face // Using a generic alarm icon
                         )
 
-                        // Maximum active wisdom
-                        Text(
-                            text = "Maximum active wisdom: $maxActiveWisdom",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = StarWhite
-                        )
+                        if (alarmsEnabled) {
+                            Divider(
+                                color = GlassSurfaceLight,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
 
-                        // Slider or buttons to adjust maxActiveWisdom
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Button(
-                                onClick = { if (maxActiveWisdom > 1) maxActiveWisdom-- },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = NebulaPurple
-                                ),
-                                modifier = Modifier.size(40.dp),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                            // Morning Alarm Toggle and Time
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("-")
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = morningAlarmEnabled,
+                                            onCheckedChange = {
+                                                morningAlarmEnabled = it
+                                            },
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = NebulaPurple,
+                                                uncheckedColor = StarWhite.copy(alpha = 0.6f)
+                                            )
+                                        )
+
+                                        Text(
+                                            text = "Morning Reflection",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = StarWhite
+                                        )
+                                    }
+
+                                    if (morningAlarmEnabled) {
+                                        Text(
+                                            text = "Daily at $morningAlarmTime",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = ElectricGreen,
+                                            modifier = Modifier.padding(start = 52.dp)
+                                        )
+                                    }
+                                }
+
+                                if (morningAlarmEnabled) {
+                                    Button(
+                                        onClick = {
+                                            timePickerMode = "morning"
+                                            showTimePickerDialog = true
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = ElectricGreen.copy(alpha = 0.2f),
+                                            contentColor = ElectricGreen
+                                        )
+                                    ) {
+                                        Text("SET TIME")
+                                    }
+                                }
                             }
 
-                            Spacer(modifier = Modifier.width(16.dp))
-
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(CircleShape)
-                                    .background(GlassSurface),
-                                contentAlignment = Alignment.Center
+                            // Evening Alarm Toggle and Time
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "$maxActiveWisdom",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = StarWhite
-                                )
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = eveningAlarmEnabled,
+                                            onCheckedChange = {
+                                                eveningAlarmEnabled = it
+                                            },
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = NebulaPurple,
+                                                uncheckedColor = StarWhite.copy(alpha = 0.6f)
+                                            )
+                                        )
+
+                                        Text(
+                                            text = "Evening Reflection",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = StarWhite
+                                        )
+                                    }
+
+                                    if (eveningAlarmEnabled) {
+                                        Text(
+                                            text = "Daily at $eveningAlarmTime",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = ElectricGreen,
+                                            modifier = Modifier.padding(start = 52.dp)
+                                        )
+                                    }
+                                }
+
+                                if (eveningAlarmEnabled) {
+                                    Button(
+                                        onClick = {
+                                            timePickerMode = "evening"
+                                            showTimePickerDialog = true
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = ElectricGreen.copy(alpha = 0.2f),
+                                            contentColor = ElectricGreen
+                                        )
+                                    ) {
+                                        Text("SET TIME")
+                                    }
+                                }
                             }
 
-                            Spacer(modifier = Modifier.width(16.dp))
-
-                            Button(
-                                onClick = { if (maxActiveWisdom < 5) maxActiveWisdom++ },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = NebulaPurple
-                                ),
-                                modifier = Modifier.size(40.dp),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-                            ) {
-                                Text("+")
-                            }
+                            Text(
+                                text = "High-priority notification alarms at set times for daily reflection",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = StarWhite.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(start = 12.dp, top = 8.dp)
+                            )
                         }
                     }
                 }
@@ -341,6 +396,34 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+
+        // Time picker dialog
+        if (showTimePickerDialog) {
+            val initialTime = if (timePickerMode == "morning") {
+                parseTimeString(morningAlarmTime)
+            } else {
+                parseTimeString(eveningAlarmTime)
+            }
+
+            TimePickerDialog(
+                initialHour = initialTime.first,
+                initialMinute = initialTime.second,
+                title = if (timePickerMode == "morning") "Set Morning Time" else "Set Evening Time",
+                onDismiss = { showTimePickerDialog = false },
+                onTimeSelected = { hour, minute ->
+                    val formattedTime = formatTimeString(hour, minute)
+                    if (timePickerMode == "morning") {
+                        morningAlarmTime = formattedTime
+                    } else {
+                        eveningAlarmTime = formattedTime
+                    }
+                    showTimePickerDialog = false
+
+                    // You would update these in your ViewModel/preferences
+                    Toast.makeText(context, "Time set to $formattedTime", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
     }
 }
 
@@ -358,7 +441,7 @@ fun SectionHeader(title: String) {
 fun FuturisticToggle(
     text: String,
     isChecked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
+    onCheckedChange: @Composable (Boolean) -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
     val scale by animateFloatAsState(
@@ -431,5 +514,245 @@ fun FuturisticToggle(
                 )
             )
         }
+    }
+}
+
+@Composable
+fun TimePickerDialog(
+    initialHour: Int,
+    initialMinute: Int,
+    title: String,
+    onDismiss: () -> Unit,
+    onTimeSelected: (hour: Int, minute: Int) -> Unit
+) {
+    var hour by remember { mutableStateOf(initialHour) }
+    var minute by remember { mutableStateOf(initialMinute) }
+    // Add this with your other remember { mutableStateOf() } variables
+    var showPermissionDialog by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = GlassSurfaceDark,
+                contentColor = StarWhite
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = ElectricGreen,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Time selection with NumberPickers
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Hour picker
+                    NumberPicker(
+                        value = hour,
+                        onValueChange = { hour = it },
+                        range = 0..23,
+                        format = { value -> value.toString().padStart(2, '0') }
+                    )
+
+                    Text(
+                        text = ":",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = ElectricGreen,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    // Minute picker
+                    NumberPicker(
+                        value = minute,
+                        onValueChange = { minute = it },
+                        range = 0..59,
+                        step = 5,
+                        format = { value -> value.toString().padStart(2, '0') }
+                    )
+                }
+
+                // Format display
+                Text(
+                    text = formatTimeDisplay(hour, minute),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = StarWhite.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
+                )
+
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = StarWhite.copy(alpha = 0.7f)
+                        )
+                    ) {
+                        Text("CANCEL")
+                    }
+
+                    Button(
+                        onClick = { onTimeSelected(hour, minute) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NebulaPurple
+                        ),
+                        modifier = Modifier.padding(start = 16.dp)
+                    ) {
+                        Text("SET")
+                    }
+                }
+            }
+        }
+
+
+    }
+
+    // Add this alongside any other dialog declarations like your TimePickerDialog
+    if (showPermissionDialog && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            title = { Text("Permission Required") },
+            text = {
+                Text("This app needs exact alarm permission to schedule wisdom reminders at specific times. Please grant this permission in the next screen.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPermissionDialog = false
+                        // Direct user to exact alarm settings
+                        val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                        intent.data = Uri.parse("package:${context.packageName}")
+                        context.startActivity(intent)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = NebulaPurple
+                    )
+                ) {
+                    Text("Open Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionDialog = false }) {
+                    Text("Later")
+                }
+            },
+            containerColor = GlassSurfaceDark,
+            titleContentColor = ElectricGreen,
+            textContentColor = StarWhite
+        )
+    }
+}
+
+
+
+
+
+@Composable
+fun NumberPicker(
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    range: IntRange,
+    step: Int = 1,
+    format: (Int) -> String = { it.toString() }
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        IconButton(
+            onClick = {
+                val newValue = if (value + step <= range.last) value + step else range.first
+                onValueChange(newValue)
+            },
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(NebulaPurple.copy(alpha = 0.2f))
+        ) {
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowUp,
+                contentDescription = "Increase",
+                tint = NebulaPurple
+            )
+        }
+
+        Text(
+            text = format(value),
+            style = MaterialTheme.typography.headlineMedium,
+            color = StarWhite,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+
+        IconButton(
+            onClick = {
+                val newValue = if (value - step >= range.first) value - step else range.last
+                onValueChange(newValue)
+            },
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(NebulaPurple.copy(alpha = 0.2f))
+        ) {
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = "Decrease",
+                tint = NebulaPurple
+            )
+        }
+    }
+}
+
+// Helper functions
+private fun parseTimeString(timeString: String): Pair<Int, Int> {
+    return try {
+        val parts = timeString.split(":")
+        val hour = parts[0].toInt()
+        val minute = parts[1].toInt()
+        Pair(hour, minute)
+    } catch (e: Exception) {
+        Pair(8, 0) // Default to 8:00 AM
+    }
+}
+
+private fun formatTimeString(hour: Int, minute: Int): String {
+    return "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+}
+
+private fun formatTimeDisplay(hour: Int, minute: Int): String {
+    val amPm = if (hour < 12) "AM" else "PM"
+    val displayHour = when {
+        hour == 0 -> 12
+        hour > 12 -> hour - 12
+        else -> hour
+    }
+    return "$displayHour:${minute.toString().padStart(2, '0')} $amPm"
+}
+
+// Function to check for exact alarm permission
+// Replace your existing checkExactAlarmPermission function with this
+@Composable
+@androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
+private fun checkExactAlarmPermission(context: Context) {
+    val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    // Add this with your other remember { mutableStateOf() } variables
+    var showPermissionDialog by remember { mutableStateOf(false) }
+    if (!alarmManager.canScheduleExactAlarms()) {
+        // Just set the flag - the actual dialog is defined in the composable
+        showPermissionDialog = true
     }
 }

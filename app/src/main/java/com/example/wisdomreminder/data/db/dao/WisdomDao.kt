@@ -23,6 +23,37 @@ interface WisdomDao {
     @Delete
     suspend fun deleteWisdom(wisdom: WisdomEntity)
 
+    // Transaction for completing the 21-day cycle
+    @Transaction
+    suspend fun completeWisdomCycle(wisdomId: Long, completionDate: LocalDateTime = LocalDateTime.now()) {
+        // Update the wisdom to mark it as completed
+        markWisdomAsCompleted(wisdomId, completionDate)
+
+        // Optionally update related stats or perform other operations
+        // updateRelatedStatistics(wisdomId)
+    }
+
+    @Query("UPDATE wisdom SET isActive = 0, dateCompleted = :completionDate WHERE id = :wisdomId")
+    suspend fun markWisdomAsCompleted(wisdomId: Long, completionDate: LocalDateTime)
+
+    // Transaction for daily resets - more efficient than separate calls
+    @Transaction
+    suspend fun performDailyReset() {
+        // Reset daily exposures
+        resetDailyExposures()
+
+        // Check and complete wisdom that reached 21 days
+        completeWisdom()
+    }
+
+    // More efficient queries with LIMIT for pagination
+    @Query("SELECT * FROM wisdom WHERE isActive = 1 ORDER BY lastExposureTime ASC LIMIT :limit")
+    suspend fun getPrioritizedActiveWisdom(limit: Int = 5): List<WisdomEntity>
+
+    // Add count-only query for statistics (more efficient)
+   // @Query("SELECT COUNT(*) FROM wisdom WHERE isActive = 1")
+    //fun getActiveCount(): Flow<Int>
+
     // 21/21 Rule specific queries
 
     @Query("SELECT * FROM wisdom WHERE isActive = 1 ORDER BY startDate DESC")

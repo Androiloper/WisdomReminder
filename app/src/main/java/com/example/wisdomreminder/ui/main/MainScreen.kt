@@ -1,5 +1,6 @@
 package com.example.wisdomreminder.ui.main
 
+import android.widget.Toast
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -39,7 +40,11 @@ import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.ui.components.GlassCard
 import com.example.wisdomreminder.ui.components.StatCard
 import com.example.wisdomreminder.ui.theme.*
+import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
+import com.example.wisdomreminder.ui.wisdom.QueuedWisdomItem
 import java.time.format.DateTimeFormatter
+import com.example.wisdomreminder.ui.components.ActiveWisdomCard
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,16 +54,28 @@ fun MainScreen(
     onWisdomListClick: () -> Unit,
     onWisdomClick: (Long) -> Unit
 ) {
-    val activeWisdom by viewModel.activeWisdom.observeAsState(emptyList())
-    val queuedWisdom by viewModel.queuedWisdom.observeAsState(emptyList())
-    val completedWisdom by viewModel.completedWisdom.observeAsState(emptyList())
-    val activeWisdomCount by viewModel.activeWisdomCount.observeAsState(0)
-    val completedWisdomCount by viewModel.completedWisdomCount.observeAsState(0)
-    val serviceRunning by viewModel.serviceRunning.observeAsState(false)
-
+    val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     var showAddWisdomDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+
+    // Collect events
+    LaunchedEffect(key1 = true) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is MainViewModel.UiEvent.WisdomAdded -> {
+                    Toast.makeText(context, "Wisdom added successfully", Toast.LENGTH_SHORT).show()
+                }
+                is MainViewModel.UiEvent.WisdomActivated -> {
+                    Toast.makeText(context, "Wisdom activated", Toast.LENGTH_SHORT).show()
+                }
+                is MainViewModel.UiEvent.Error -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+                else -> { /* Handle other events */ }
+            }
+        }
+    }
 
     // Cosmic background
     Box(
@@ -102,413 +119,322 @@ fun MainScreen(
                 .blur(60.dp)
         )
 
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = Color.Transparent,
-            contentColor = StarWhite,
-            topBar = {
-                TopAppBar(
-                    title = {
+
+
+
+        // Render UI based on state
+        when (val state = uiState) {
+            MainViewModel.WisdomUiState.Loading -> {
+                // Show loading indicator
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = ElectricGreen)
+                }
+            }
+
+            is MainViewModel.WisdomUiState.Error -> {
+                // Show error state
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(16.dp)
+                    ) {
                         Text(
-                            "WISDOM REMINDER",
-                            style = MaterialTheme.typography.headlineLarge.copy(
-                                fontWeight = FontWeight.Bold
+                            "Error: ${state.message}",
+                            color = NeonPink,
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = { viewModel.refreshData() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = NebulaPurple
                             )
+                        ) {
+                            Text("RETRY")
+                        }
+                    }
+                }
+            }
+
+            is MainViewModel.WisdomUiState.Success -> {
+                // Main content when data loaded successfully
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = Color.Transparent,
+                    contentColor = StarWhite,
+                    topBar = {
+                        TopAppBar(
+                            title = {
+                                Text(
+                                    "WISDOM REMINDER",
+                                    style = MaterialTheme.typography.headlineLarge.copy(
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                )
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = GlassSurface.copy(alpha = 0.5f),
+                                titleContentColor = StarWhite
+                            ),
+                            actions = {
+                                IconButton(onClick = onSettingsClick) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Settings",
+                                        tint = StarWhite
+                                    )
+                                }
+                            }
                         )
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = GlassSurface.copy(alpha = 0.5f),
-                        titleContentColor = StarWhite
-                    ),
-                    actions = {
-                        IconButton(onClick = onSettingsClick) {
+                    floatingActionButton = {
+                        FloatingActionButton(
+                            onClick = { showAddWisdomDialog = true },
+                            containerColor = NebulaPurple,
+                            contentColor = StarWhite
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "Settings",
-                                tint = StarWhite
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add Wisdom"
                             )
                         }
                     }
-                )
-            },
-            floatingActionButton = {
-                FloatingActionButton(
-                    onClick = { showAddWisdomDialog = true },
-                    containerColor = NebulaPurple,
-                    contentColor = StarWhite
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Add Wisdom"
-                    )
-                }
-            }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Stats Cards Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    StatCard(
-                        title = "ACTIVE",
-                        value = activeWisdomCount.toString(),
-                        icon = Icons.Default.PlayArrow,
-                        color = ElectricGreen,
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        title = "COMPLETED",
-                        value = completedWisdomCount.toString(),
-                        icon = Icons.Default.PlayArrow,
-                        color = CyberBlue,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Main Section - Featured Active Wisdom
-                Text(
-                    text = "ACTIVE WISDOM",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = ElectricGreen,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
-                )
-
-                if (activeWisdom.isEmpty()) {
-                    // Empty state for active wisdom
-                    GlassCard(
+                ) { paddingValues ->
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                            .clickable { onWisdomListClick() }
+                            .fillMaxSize()
+                            .padding(paddingValues)
+                            .verticalScroll(scrollState)
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.empty_active),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = StarWhite,
-                                    textAlign = TextAlign.Center
-                                )
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                                Button(
-                                    onClick = onWisdomListClick,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = NebulaPurple
-                                    ),
-                                    modifier = Modifier.padding(top = 16.dp)
+                        // Stats Cards Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            StatCard(
+                                title = "ACTIVE",
+                                value = state.activeCount.toString(),
+                                icon = Icons.Default.PlayArrow,
+                                color = ElectricGreen,
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatCard(
+                                title = "COMPLETED",
+                                value = state.completedCount.toString(),
+                                icon = Icons.Default.PlayArrow,
+                                color = CyberBlue,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        // Main Section - Featured Active Wisdom
+                        Text(
+                            text = "ACTIVE WISDOM",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = ElectricGreen,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                        )
+
+                        if (state.activeWisdom.isEmpty()) {
+                            // Empty state for active wisdom
+                            GlassCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp)
+                                    .clickable { onWisdomListClick() }
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Text("VIEW WISDOM")
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.empty_active),
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = StarWhite,
+                                            textAlign = TextAlign.Center
+                                        )
+
+                                        Button(
+                                            onClick = onWisdomListClick,
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = NebulaPurple
+                                            ),
+                                            modifier = Modifier.padding(top = 16.dp)
+                                        ) {
+                                            Text("VIEW WISDOM")
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Display featured wisdom
+                            ActiveWisdomCard(
+                                wisdom = state.activeWisdom.first(),
+                                onClick = { wisdom -> onWisdomClick(wisdom.id) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        // Queued Wisdom Section
+                        Text(
+                            text = "QUEUED WISDOM",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = NebulaPurple,
+                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                        )
+
+                        if (state.queuedWisdom.isEmpty()) {
+                            // Empty state for queued wisdom
+                            GlassCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(100.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.empty_queued),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = StarWhite,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        } else {
+                            // Display first few queued wisdom
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                state.queuedWisdom.take(3).forEach { wisdom ->
+                                    QueuedWisdomItem(
+                                        wisdom = wisdom,
+                                        onClick = { onWisdomClick(wisdom.id) },
+                                        onActivate = { viewModel.activateWisdom(wisdom.id) }
+                                    )
+                                }
+
+                                if (state.queuedWisdom.size > 3) {
+                                    OutlinedButton(
+                                        onClick = onWisdomListClick,
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = NebulaPurple
+                                        ),
+                                        modifier = Modifier
+                                            .align(Alignment.CenterHorizontally)
+                                            .padding(top = 8.dp)
+                                    ) {
+                                        Text("VIEW ALL (${state.queuedWisdom.size})")
+                                    }
                                 }
                             }
                         }
-                    }
-                } else {
-                    // Display featured wisdom
-                    ActiveWisdomCard(
-                        wisdom = activeWisdom.first(),
-                        onClick = { onWisdomClick(it.id) },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
 
-                // Queued Wisdom Section
-                Text(
-                    text = "QUEUED WISDOM",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = NebulaPurple,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                )
-
-                if (queuedWisdom.isEmpty()) {
-                    // Empty state for queued wisdom
-                    GlassCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = stringResource(R.string.empty_queued),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = StarWhite,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                } else {
-                    // Display first few queued wisdom
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        queuedWisdom.take(3).forEach { wisdom ->
-                            QueuedWisdomItem(
-                                wisdom = wisdom,
-                                onClick = { onWisdomClick(wisdom.id) },
-                                onActivate = { viewModel.activateWisdom(wisdom.id) }
-                            )
-                        }
-
-                        if (queuedWisdom.size > 3) {
-                            OutlinedButton(
-                                onClick = onWisdomListClick,
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = NebulaPurple
+                        // Debug buttons (for development only)
+                        if (state.queuedWisdom.isEmpty() && state.activeWisdom.isEmpty()) {
+                            Button(
+                                onClick = { viewModel.addSampleWisdom() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = NeonPink
                                 ),
                                 modifier = Modifier
                                     .align(Alignment.CenterHorizontally)
-                                    .padding(top = 8.dp)
+                                    .padding(top = 16.dp)
                             ) {
-                                Text("VIEW ALL (${queuedWisdom.size})")
+                                Text("ADD SAMPLE WISDOM")
                             }
                         }
-                    }
-                }
 
-                // Debug buttons (for development only)
-                if (queuedWisdom.isEmpty() && activeWisdom.isEmpty()) {
-                    Button(
-                        onClick = { viewModel.addSampleWisdom() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = NeonPink
-                        ),
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .padding(top = 16.dp)
-                    ) {
-                        Text("ADD SAMPLE WISDOM")
-                    }
-                }
-
-                // Service status indicator
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (serviceRunning) ElectricGreen.copy(alpha = 0.2f) else NeonPink.copy(alpha = 0.2f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
+                        // Service status indicator
+                        Card(
                             modifier = Modifier
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(if (serviceRunning) ElectricGreen else NeonPink)
-                        )
-
-                        Text(
-                            text = if (serviceRunning) "Wisdom service running" else "Wisdom service stopped",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (serviceRunning) ElectricGreen else NeonPink,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-
-                        Spacer(modifier = Modifier.weight(1f))
-
-                        TextButton(
-                            onClick = {
-                                if (serviceRunning) {
-                                    viewModel.stopWisdomService(context)
-                                } else {
-                                    viewModel.checkAndRestartService(context)
-                                }
-                            },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = if (serviceRunning) StarWhite else NeonPink
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (state.serviceRunning)
+                                    ElectricGreen.copy(alpha = 0.2f)
+                                else
+                                    NeonPink.copy(alpha = 0.2f)
                             )
                         ) {
-                            Text(if (serviceRunning) "STOP" else "START")
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .clip(CircleShape)
+                                        .background(if (state.serviceRunning) ElectricGreen else NeonPink)
+                                )
+
+                                Text(
+                                    text = if (state.serviceRunning)
+                                        "Wisdom service running"
+                                    else
+                                        "Wisdom service stopped",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (state.serviceRunning) ElectricGreen else NeonPink,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+
+                                Spacer(modifier = Modifier.weight(1f))
+
+                                TextButton(
+                                    onClick = {
+                                        if (state.serviceRunning) {
+                                            viewModel.stopWisdomService(context)
+                                        } else {
+                                            viewModel.checkAndRestartService(context)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = if (state.serviceRunning) StarWhite else NeonPink
+                                    )
+                                ) {
+                                    Text(if (state.serviceRunning) "STOP" else "START")
+                                }
+                            }
                         }
+
+                        Spacer(modifier = Modifier.height(80.dp)) // Bottom spacing for FAB
                     }
                 }
 
-                Spacer(modifier = Modifier.height(80.dp)) // Bottom spacing for FAB
-            }
-        }
-    }
-}
-
-@Composable
-fun ActiveWisdomCard(
-    wisdom: Wisdom,
-    onClick: (Wisdom) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val dateFormatter = DateTimeFormatter.ofPattern("MMM dd, yyyy")
-    val progress = (wisdom.currentDay.toFloat() / 21f).coerceIn(0f, 1f)
-
-    GlassCard(
-        modifier = modifier
-            .clickable { onClick(wisdom) }
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessLow
-                )
-            )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            // Header with day counter
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(MaterialTheme.shapes.small)
-                        .background(NeonPink.copy(alpha = 0.2f))
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "DAY ${wisdom.currentDay}/21",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = NeonPink
-                    )
-                }
-
-                Text(
-                    text = "${wisdom.exposuresToday}/21 today",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ElectricGreen
-                )
-            }
-
-            // Progress indicator
-            LinearProgressIndicator(
-                progress =  progress,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp)
-                    .height(6.dp),
-                color = ElectricGreen,
-                trackColor = GlassSurfaceLight
-            )
-
-            // Wisdom text
-            Text(
-                text = "\"${wisdom.text}\"",
-                style = MaterialTheme.typography.bodyLarge,
-                color = StarWhite,
-                modifier = Modifier.padding(vertical = 16.dp)
-            )
-
-            // Source and stats
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Column {
-                    if (wisdom.source.isNotBlank()) {
-                        Text(
-                            text = wisdom.source,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontStyle = FontStyle.Italic
-                            ),
-                            color = CyberBlue
-                        )
-                    }
-
-                    Text(
-                        text = "Started: ${wisdom.startDate?.format(dateFormatter) ?: "Not started"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = StarWhite.copy(alpha = 0.7f)
-                    )
-                }
-
-                Text(
-                    text = "${wisdom.exposuresTotal} exposures",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = StarWhite.copy(alpha = 0.7f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun QueuedWisdomItem(
-    wisdom: Wisdom,
-    onClick: () -> Unit,
-    onActivate: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = GlassSurface.copy(alpha = 0.3f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = wisdom.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = StarWhite,
-                    maxLines = 2
-                )
-
-                if (wisdom.source.isNotBlank()) {
-                    Text(
-                        text = wisdom.source,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontStyle = FontStyle.Italic
-                        ),
-                        color = CyberBlue,
-                        maxLines = 1
+                // Add Wisdom Dialog
+                if (showAddWisdomDialog) {
+                    // The AddWisdomDialog Composable should be implemented elsewhere
+                    AddWisdomDialog(
+                        onDismiss = { showAddWisdomDialog = false },
+                        onSave = { text, source, category ->
+                            viewModel.addWisdom(text, source, category)
+                            showAddWisdomDialog = false
+                        }
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Button(
-                onClick = onActivate,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = NebulaPurple
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                Text("ACTIVATE")
-            }
         }
     }
+
+
 }

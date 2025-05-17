@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.example.wisdomreminder.util.WisdomAlarmManager
 import com.example.wisdomreminder.util.WorkScheduler
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
@@ -19,6 +20,9 @@ class WisdomReminderApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var workScheduler: WorkScheduler
 
+    @Inject
+    lateinit var wisdomAlarmManager: WisdomAlarmManager
+
     override fun onCreate() {
         super.onCreate()
 
@@ -30,6 +34,10 @@ class WisdomReminderApplication : Application(), Configuration.Provider {
         // Schedule work for reminders and 21/21 rule tracking
         workScheduler.scheduleAllWork()
 
+        // Schedule alarms based on user preferences
+        wisdomAlarmManager.scheduleAlarms()
+
+        Log.d("WisdomReminderApp", "Application initialized")
         Log.d(TAG, "Application initialized")
     }
 
