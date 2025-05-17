@@ -25,6 +25,8 @@ class MainActivity : ComponentActivity() {
     private val TAG = "MainActivity"
     private val viewModel: MainViewModel by viewModels()
 
+
+
     // Activity result launcher for overlay permission
     private val overlayPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
