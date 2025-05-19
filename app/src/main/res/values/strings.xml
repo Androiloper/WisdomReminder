@@ -13,12 +13,14 @@
     <!-- Main screen -->
     <string name="app_description">Implementing the 21/21 rule for wisdom internalization</string>
     <string name="welcome_message">Welcome to Wisdom Reminder</string>
+    <string name="section_all_wisdom">ALL WISDOM</string>
 
     <!-- Wisdom management -->
     <string name="add_wisdom">Add New Wisdom</string>
     <string name="edit_wisdom">Edit Wisdom</string>
     <string name="delete_wisdom">Delete Wisdom</string>
     <string name="activate_wisdom">Activate</string>
+
 
     <!-- Status descriptions -->
     <string name="wisdom_active">Active (Day %1$d/21)</string>

@@ -47,6 +47,27 @@ import com.example.wisdomreminder.ui.components.ActiveWisdomCard
 import com.example.wisdomreminder.ui.components.SwipeableWisdomCards
 import com.example.wisdomreminder.ui.main.MainViewModel
 
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
+
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Card
+
+
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.remember
+import com.example.wisdomreminder.ui.components.AllWisdomSection
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -393,6 +414,26 @@ fun MainScreen(
                             }
                         }
 
+                        // ALL WISDOM Section
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = "ALL WISDOM",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = CyberBlue,
+                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                        )
+
+                        // Combine all wisdom for the ALL WISDOM section
+                       //Spacer(modifier = Modifier.height(16.dp))
+
+                        AllWisdomSection(
+                            allWisdom = state.activeWisdom + state.queuedWisdom + state.completedWisdom,
+                            onWisdomClick = { wisdomId -> onWisdomClick(wisdomId) }
+                        )
+
+
+
                         // Debug buttons (for development only)
                         if (state.queuedWisdom.isEmpty() && state.activeWisdom.isEmpty()) {
                             Button(
@@ -426,6 +467,4 @@ fun MainScreen(
             }
         }
     }
-
-
 }

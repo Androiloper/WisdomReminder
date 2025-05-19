@@ -147,4 +147,9 @@ dependencies {
 
     // Add the EntryPoints annotation if needed
     implementation("com.google.dagger:hilt-android-gradle-plugin:2.48")
+
+
+
+
+
 }
