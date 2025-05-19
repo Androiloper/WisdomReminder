@@ -425,12 +425,17 @@ fun MainScreen(
                         )
 
                         // Combine all wisdom for the ALL WISDOM section
-                       //Spacer(modifier = Modifier.height(16.dp))
+
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         AllWisdomSection(
                             allWisdom = state.activeWisdom + state.queuedWisdom + state.completedWisdom,
                             onWisdomClick = { wisdomId -> onWisdomClick(wisdomId) }
                         )
+
+
+
 
 
 
