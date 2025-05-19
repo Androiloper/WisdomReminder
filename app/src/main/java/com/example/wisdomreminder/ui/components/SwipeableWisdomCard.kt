@@ -1,3 +1,6 @@
+// SwipeableWisdomCards.kt - Fixed version to avoid ambiguity
+// This replaces the onCardClick with onWisdomClick for clarity
+
 package com.example.wisdomreminder.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
@@ -20,6 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -68,13 +72,13 @@ import com.example.wisdomreminder.ui.theme.glitchEffect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-import kotlin.math.roundToInt
+import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SwipeableWisdomCards(
     allWisdom: List<Wisdom>,
-    onCardClick: (Wisdom) -> Unit,
+    onWisdomClick: (Long) -> Unit,  // Change to onWisdomClick with Long parameter
     modifier: Modifier = Modifier
 ) {
     if (allWisdom.isEmpty()) {
@@ -176,7 +180,7 @@ fun SwipeableWisdomCards(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
-                .offset { IntOffset(offsetX.roundToInt(), 0) }
+                .offset { IntOffset(offsetX.toInt(), 0) }
                 .graphicsLayer {
                     scaleX = scale.value
                     scaleY = scale.value
@@ -203,7 +207,7 @@ fun SwipeableWisdomCards(
                     )
                 )
             ),
-            onClick = { onCardClick(currentWisdom) }
+            onClick = { onWisdomClick(currentWisdom.id) }  // Modified to pass the id directly
         ) {
             Column(
                 modifier = Modifier

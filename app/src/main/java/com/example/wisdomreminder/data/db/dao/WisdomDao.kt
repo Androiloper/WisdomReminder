@@ -110,4 +110,6 @@ interface WisdomDao {
 
     @Query("SELECT * FROM wisdom WHERE isActive = 1")
     suspend fun getActiveWisdomDirectly(): List<WisdomEntity>
+
+
 }

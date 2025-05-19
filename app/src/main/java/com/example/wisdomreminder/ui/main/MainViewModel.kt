@@ -2,6 +2,7 @@ package com.example.wisdomreminder.ui.main
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -9,7 +10,10 @@ import androidx.lifecycle.viewModelScope
 import com.example.wisdomreminder.data.repository.IWisdomRepository
 import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.service.WisdomDisplayService
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -20,16 +24,30 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.time.LocalDateTime
 import javax.inject.Inject
 
+
+import kotlinx.coroutines.flow.Flow
+
+import kotlinx.coroutines.flow.StateFlow
+
+
+
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    private val wisdomRepository: IWisdomRepository
+    private val wisdomRepository: IWisdomRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
     private val TAG = "MainViewModel"
+
+    // Shared preferences for storing selected categories
+    private val prefs: SharedPreferences = context.getSharedPreferences("wisdom_prefs", Context.MODE_PRIVATE)
+    private val gson = Gson()
 
     // UI state using sealed class pattern
     sealed class WisdomUiState {
@@ -40,7 +58,10 @@ class MainViewModel @Inject constructor(
             val completedWisdom: List<Wisdom> = emptyList(),
             val activeCount: Int = 0,
             val completedCount: Int = 0,
-            val serviceRunning: Boolean = false
+            val serviceRunning: Boolean = false,
+            val allCategories: List<String> = emptyList(),
+            val selectedCategories: List<String> = emptyList(),
+            val categoryWisdom: Map<String, List<Wisdom>> = emptyMap()
         ) : WisdomUiState()
         data class Error(val message: String) : WisdomUiState()
     }
@@ -55,12 +76,17 @@ class MainViewModel @Inject constructor(
     private val _selectedWisdom = MutableStateFlow<Wisdom?>(null)
     val selectedWisdom = _selectedWisdom.asStateFlow()
 
+    // Selected categories
+    private val _selectedCategories = MutableStateFlow<List<String>>(emptyList())
+
     // Events/actions
     sealed class UiEvent {
         object WisdomAdded : UiEvent()
         object WisdomDeleted : UiEvent()
         object WisdomUpdated : UiEvent()
         object WisdomActivated : UiEvent()
+        object CategoryAdded : UiEvent()
+        object CategoryRemoved : UiEvent()
         data class Error(val message: String) : UiEvent()
     }
 
@@ -71,6 +97,7 @@ class MainViewModel @Inject constructor(
         Log.d(TAG, "MainViewModel initialized, triggering explicit data load")
         viewModelScope.launch {
             _uiState.value = WisdomUiState.Loading
+            loadSelectedCategories()
             refreshData()
         }
     }
@@ -80,42 +107,137 @@ class MainViewModel @Inject constructor(
         initializeDataCollection()
     }
 
+    private fun loadSelectedCategories() {
+        val categoriesJson = prefs.getString(SELECTED_CATEGORIES_KEY, null)
+        if (categoriesJson != null) {
+            try {
+                val type = object : TypeToken<List<String>>() {}.type
+                val categories: List<String> = gson.fromJson(categoriesJson, type)
+                _selectedCategories.value = categories
+                Log.d(TAG, "Loaded ${categories.size} selected categories from preferences")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading selected categories", e)
+                _selectedCategories.value = emptyList()
+            }
+        }
+    }
+
+    private fun saveSelectedCategories(categories: List<String>) {
+        try {
+            val categoriesJson = gson.toJson(categories)
+            prefs.edit().putString(SELECTED_CATEGORIES_KEY, categoriesJson).apply()
+            Log.d(TAG, "Saved ${categories.size} selected categories to preferences")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving selected categories", e)
+        }
+    }
+
     private fun initializeDataCollection() {
         viewModelScope.launch {
             Log.d(TAG, "Starting to collect from repository flows")
-            Log.d(TAG, "getActiveWisdom() called")
-            Log.d(TAG, "getQueuedWisdom() called")
-            Log.d(TAG, "getCompletedWisdom() called")
-            Log.d(TAG, "getActiveWisdomCount() called")
 
             try {
+                // Combine the basic flows first
                 combine(
                     wisdomRepository.getActiveWisdom(),
                     wisdomRepository.getQueuedWisdom(),
                     wisdomRepository.getCompletedWisdom(),
                     wisdomRepository.getActiveWisdomCount(),
-                    wisdomRepository.getCompletedWisdomCount()
-                ) { active, queued, completed, activeCount, completedCount ->
-                    WisdomUiState.Success(
-                        activeWisdom = active,
-                        queuedWisdom = queued,
-                        completedWisdom = completed,
-                        activeCount = activeCount,
-                        completedCount = completedCount,
-                        serviceRunning = WisdomDisplayService.isServiceRunning
+                    wisdomRepository.getCompletedWisdomCount(),
+                    wisdomRepository.getAllCategories()
+                ) { active, queued, completed, activeCount, completedCount, allCategories ->
+                    // First part of the state without category wisdom
+                    Tuple(active, queued, completed, activeCount, completedCount, allCategories)
+                }.collect { tuple ->
+                    val selectedCats = _selectedCategories.value
+
+                    // Now build the category wisdom map
+                    val categoryWisdomMap = mutableMapOf<String, List<Wisdom>>()
+
+                    // Collect wisdom by each selected category
+                    selectedCats.forEach { category ->
+                        try {
+                            val wisdomByCategory = wisdomRepository.getWisdomByCategory(category).first()
+                            categoryWisdomMap[category] = wisdomByCategory
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error getting wisdom for category: $category", e)
+                            categoryWisdomMap[category] = emptyList()
+                        }
+                    }
+
+                    // Construct the final state
+                    val state = WisdomUiState.Success(
+                        activeWisdom = tuple.active,
+                        queuedWisdom = tuple.queued,
+                        completedWisdom = tuple.completed,
+                        activeCount = tuple.activeCount,
+                        completedCount = tuple.completedCount,
+                        serviceRunning = WisdomDisplayService.isServiceRunning,
+                        allCategories = tuple.allCategories,
+                        selectedCategories = selectedCats,
+                        categoryWisdom = categoryWisdomMap
                     )
-                }.catch { error ->
-                    Log.e(TAG, "Error collecting wisdom data", error)
-                    _uiState.value = WisdomUiState.Error(
-                        message = error.message ?: "Unknown error occurred"
-                    )
-                    _events.emit(UiEvent.Error(error.message ?: "Unknown error occurred"))
-                }.collect { state ->
+
                     _uiState.value = state
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Exception in data collection", e)
                 _uiState.value = WisdomUiState.Error("Failed to load data: ${e.localizedMessage}")
+            }
+        }
+    }
+
+    // Helper class for managing multiple flow outputs
+    private data class Tuple(
+        val active: List<Wisdom>,
+        val queued: List<Wisdom>,
+        val completed: List<Wisdom>,
+        val activeCount: Int,
+        val completedCount: Int,
+        val allCategories: List<String>
+    )
+
+    // Add a category to display on the main screen
+    fun addCategory(category: String) {
+        viewModelScope.launch {
+            try {
+                val currentCategories = _selectedCategories.value.toMutableList()
+                if (category !in currentCategories) {
+                    currentCategories.add(category)
+                    _selectedCategories.value = currentCategories
+                    saveSelectedCategories(currentCategories)
+                    _events.emit(UiEvent.CategoryAdded)
+
+                    // Update UI with the new category
+                    refreshData()
+
+                    Log.d(TAG, "Added category: $category")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding category", e)
+                _events.emit(UiEvent.Error("Failed to add category: ${e.localizedMessage}"))
+            }
+        }
+    }
+
+    // Remove a category from display
+    fun removeCategory(category: String) {
+        viewModelScope.launch {
+            try {
+                val currentCategories = _selectedCategories.value.toMutableList()
+                if (currentCategories.remove(category)) {
+                    _selectedCategories.value = currentCategories
+                    saveSelectedCategories(currentCategories)
+                    _events.emit(UiEvent.CategoryRemoved)
+
+                    // Update UI without the removed category
+                    refreshData()
+
+                    Log.d(TAG, "Removed category: $category")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing category", e)
+                _events.emit(UiEvent.Error("Failed to remove category: ${e.localizedMessage}"))
             }
         }
     }
@@ -181,6 +303,171 @@ class MainViewModel @Inject constructor(
                 _events.emit(UiEvent.Error("An unexpected error occurred while adding wisdom"))
             }
         }
+    }
+
+    companion object {
+        private const val SELECTED_CATEGORIES_KEY = "selected_categories"
+    }
+
+    // Update existing methods to support category functionality
+    // Data refresh method - updated for Result and to include category data
+    fun refreshData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Starting data refresh")
+
+                // Only show loading state if we don't already have data
+                val currentState = _uiState.value
+                if (currentState !is WisdomUiState.Success) {
+                    _uiState.emit(WisdomUiState.Loading)
+                }
+
+                // Get fresh data with timeouts to prevent hangs
+                withTimeout(5000) {
+                    val activeItems = wisdomRepository.getActiveWisdom().first()
+                    val queuedItems = wisdomRepository.getQueuedWisdom().first()
+                    val completedItems = wisdomRepository.getCompletedWisdom().first()
+                    val activeCount = wisdomRepository.getActiveWisdomCount().first()
+                    val completedCount = wisdomRepository.getCompletedWisdomCount().first()
+                    val allCategories = wisdomRepository.getAllCategories().first()
+                    val selectedCats = _selectedCategories.value
+
+                    // Get wisdom for each selected category
+                    val categoryWisdomMap = mutableMapOf<String, List<Wisdom>>()
+                    selectedCats.forEach { category ->
+                        try {
+                            val wisdomByCategory = wisdomRepository.getWisdomByCategory(category).first()
+                            categoryWisdomMap[category] = wisdomByCategory
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error getting wisdom for category: $category", e)
+                            categoryWisdomMap[category] = emptyList()
+                        }
+                    }
+
+                    Log.d(TAG, "Refresh complete - Active: ${activeItems.size}, Queued: ${queuedItems.size}")
+
+                    // Update UI state
+                    _uiState.emit(WisdomUiState.Success(
+                        activeWisdom = activeItems,
+                        queuedWisdom = queuedItems,
+                        completedWisdom = completedItems,
+                        activeCount = activeCount,
+                        completedCount = completedCount,
+                        serviceRunning = WisdomDisplayService.isServiceRunning,
+                        allCategories = allCategories,
+                        selectedCategories = selectedCats,
+                        categoryWisdom = categoryWisdomMap
+                    ))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error refreshing data", e)
+                _uiState.emit(WisdomUiState.Error("Failed to refresh data: ${e.localizedMessage}"))
+            }
+        }
+    }
+
+    // Add a category to display on the main screen
+    fun addCategory(category: String) {
+        viewModelScope.launch {
+            try {
+                val currentCategories = _selectedCategories.value.toMutableList()
+                if (category !in currentCategories) {
+                    currentCategories.add(category)
+                    _selectedCategories.value = currentCategories
+                    saveSelectedCategories(currentCategories)
+                    _events.emit(UiEvent.CategoryAdded)
+                    Log.d(TAG, "Added category: $category")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error adding category", e)
+                _events.emit(UiEvent.Error("Failed to add category: ${e.localizedMessage}"))
+            }
+        }
+    }
+
+    // Remove a category from display
+    fun removeCategory(category: String) {
+        viewModelScope.launch {
+            try {
+                val currentCategories = _selectedCategories.value.toMutableList()
+                if (currentCategories.remove(category)) {
+                    _selectedCategories.value = currentCategories
+                    saveSelectedCategories(currentCategories)
+                    _events.emit(UiEvent.CategoryRemoved)
+                    Log.d(TAG, "Removed category: $category")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing category", e)
+                _events.emit(UiEvent.Error("Failed to remove category: ${e.localizedMessage}"))
+            }
+        }
+    }
+
+    // Get wisdom by ID - updated for Result
+    fun getWisdomById(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val result = wisdomRepository.getWisdomById(id)
+
+                result.fold(
+                    onSuccess = { wisdom ->
+                        _selectedWisdom.value = wisdom
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Error getting wisdom by ID: $id", error)
+                        _events.emit(UiEvent.Error("Could not load wisdom details"))
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception in getWisdomById", e)
+                _events.emit(UiEvent.Error("An unexpected error occurred"))
+            }
+        }
+    }
+
+    // Add new wisdom - updated for Result
+    fun addWisdom(text: String, source: String, category: String) {
+        if (text.isBlank()) return
+
+        Log.d(TAG, "Adding wisdom: $text, $source, $category")
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val wisdom = Wisdom(
+                    text = text,
+                    source = source,
+                    category = category,
+                    dateCreated = LocalDateTime.now(),
+                    isActive = false,
+                    dateCompleted = null
+                )
+
+                val result = wisdomRepository.addWisdom(wisdom)
+
+                result.fold(
+                    onSuccess = { id ->
+                        if (id > 0) {
+                            _events.emit(UiEvent.WisdomAdded)
+                            Log.d(TAG, "Wisdom added successfully with ID: $id")
+                            refreshData()
+                            debugDatabaseContents()
+                        } else {
+                            _events.emit(UiEvent.Error("Failed to add wisdom (invalid ID)"))
+                        }
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Error adding wisdom", error)
+                        _events.emit(UiEvent.Error("Failed to add wisdom: ${error.localizedMessage}"))
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception in addWisdom", e)
+                _events.emit(UiEvent.Error("An unexpected error occurred while adding wisdom"))
+            }
+        }
+    }
+
+    companion object {
+        private const val SELECTED_CATEGORIES_KEY = "selected_categories"
     }
 
     // Update wisdom - updated for Result

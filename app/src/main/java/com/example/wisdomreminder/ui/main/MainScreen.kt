@@ -37,37 +37,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.wisdomreminder.R
 import com.example.wisdomreminder.model.Wisdom
-import com.example.wisdomreminder.ui.components.GlassCard
-import com.example.wisdomreminder.ui.components.StatCard
+import com.example.wisdomreminder.ui.components.*
 import com.example.wisdomreminder.ui.theme.*
 import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
 import com.example.wisdomreminder.ui.wisdom.QueuedWisdomItem
 import java.time.format.DateTimeFormatter
-import com.example.wisdomreminder.ui.components.ActiveWisdomCard
-import com.example.wisdomreminder.ui.components.SwipeableWisdomCards
-import com.example.wisdomreminder.ui.main.MainViewModel
-
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.PagerState
-import androidx.compose.foundation.pager.rememberPagerState
-
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Card
-
-
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.remember
-import com.example.wisdomreminder.ui.components.AllWisdomSection
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,7 +57,7 @@ fun MainScreen(
     val scrollState = rememberScrollState()
 
     // Collect events
-    LaunchedEffect(key1 = true) {
+    LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
                 is MainViewModel.UiEvent.WisdomAdded -> {
@@ -91,6 +65,12 @@ fun MainScreen(
                 }
                 is MainViewModel.UiEvent.WisdomActivated -> {
                     Toast.makeText(context, "Wisdom activated", Toast.LENGTH_SHORT).show()
+                }
+                is MainViewModel.UiEvent.CategoryAdded -> {
+                    Toast.makeText(context, "Category added successfully", Toast.LENGTH_SHORT).show()
+                }
+                is MainViewModel.UiEvent.CategoryRemoved -> {
+                    Toast.makeText(context, "Category removed", Toast.LENGTH_SHORT).show()
                 }
                 is MainViewModel.UiEvent.Error -> {
                     Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
@@ -147,9 +127,6 @@ fun MainScreen(
             particleCount = 30,
             modifier = Modifier.fillMaxSize()
         )
-
-
-
 
         // Render UI based on state
         when (val state = uiState) {
@@ -236,7 +213,7 @@ fun MainScreen(
                                     Text(if (state.serviceRunning) "STOP" else "START")
                                 }
 
-                                IconButton(onClick = onSettingsClick) {
+                                IconButton(onClick = { onSettingsClick() }) {
                                     Icon(
                                         imageVector = Icons.Default.Settings,
                                         contentDescription = "Settings",
@@ -290,7 +267,7 @@ fun MainScreen(
                             )
                         }
 
-                        // NEW ADDITION: Swipeable Wisdom Cards
+                        // Swipeable Wisdom Cards
                         // Combine all wisdom for swiping through
                         val allWisdom = state.activeWisdom + state.queuedWisdom + state.completedWisdom
 
@@ -301,10 +278,93 @@ fun MainScreen(
                             modifier = Modifier.padding(top = 8.dp)
                         )
 
+                        // Fixed SwipeableWisdomCards with explicit type
                         SwipeableWisdomCards(
                             allWisdom = allWisdom,
-                            onCardClick = { wisdom -> onWisdomClick(wisdom.id) }
+                            onWisdomClick = { id: Long -> onWisdomClick(id) }
                         )
+
+                        // Category Cards Section
+                        Text(
+                            text = "CATEGORY CARDS",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = CyberBlue,
+                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                        )
+
+                        // Current category cards
+                        if (state.selectedCategories.isEmpty()) {
+                            // Empty state
+                            GlassCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(100.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Add category cards to view wisdom by category",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = StarWhite,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        } else {
+                            // Display category cards
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                state.selectedCategories.forEach { category ->
+                                    val wisdomList = state.categoryWisdom[category] ?: emptyList()
+                                    // Fixed CategoryWisdomCard call with explicit types
+                                    CategoryWisdomCard(
+                                        category = category,
+                                        wisdomList = wisdomList,
+                                        onWisdomClick = { id: Long -> onWisdomClick(id) },
+                                        onRemove = { viewModel.removeCategory(category) }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Add Category Button
+                        var showCategorySelectionDialog by remember { mutableStateOf(false) }
+
+                        Button(
+                            onClick = { showCategorySelectionDialog = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = CyberBlue.copy(alpha = 0.8f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add Category",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("ADD CATEGORY CARD")
+                        }
+
+                        // Category Selection Dialog
+                        if (showCategorySelectionDialog) {
+                            CategorySelectionDialog(
+                                availableCategories = state.allCategories,
+                                selectedCategories = state.selectedCategories,
+                                onDismiss = { showCategorySelectionDialog = false },
+                                onCategorySelected = { category ->
+                                    viewModel.addCategory(category)
+                                }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         // Main Section - Featured Active Wisdom
                         Text(
@@ -337,7 +397,7 @@ fun MainScreen(
                                         )
 
                                         Button(
-                                            onClick = onWisdomListClick,
+                                            onClick = { onWisdomListClick() },
                                             colors = ButtonDefaults.buttonColors(
                                                 containerColor = NebulaPurple
                                             ),
@@ -400,7 +460,7 @@ fun MainScreen(
 
                                 if (state.queuedWisdom.size > 3) {
                                     OutlinedButton(
-                                        onClick = onWisdomListClick,
+                                        onClick = { onWisdomListClick() },
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             contentColor = NebulaPurple
                                         ),
@@ -425,19 +485,12 @@ fun MainScreen(
                         )
 
                         // Combine all wisdom for the ALL WISDOM section
-
-
                         Spacer(modifier = Modifier.height(16.dp))
 
                         AllWisdomSection(
                             allWisdom = state.activeWisdom + state.queuedWisdom + state.completedWisdom,
                             onWisdomClick = { wisdomId -> onWisdomClick(wisdomId) }
                         )
-
-
-
-
-
 
                         // Debug buttons (for development only)
                         if (state.queuedWisdom.isEmpty() && state.activeWisdom.isEmpty()) {
@@ -460,7 +513,6 @@ fun MainScreen(
 
                 // Add Wisdom Dialog
                 if (showAddWisdomDialog) {
-                    // The AddWisdomDialog Composable should be implemented elsewhere
                     AddWisdomDialog(
                         onDismiss = { showAddWisdomDialog = false },
                         onSave = { text, source, category ->
