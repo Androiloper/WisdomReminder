@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.time.LocalDateTime
 import javax.inject.Inject
 
@@ -65,6 +66,14 @@ class MainViewModel @Inject constructor(
 
     private val _events = MutableSharedFlow<UiEvent>()
     val events = _events.asSharedFlow()
+
+    init {
+        Log.d(TAG, "MainViewModel initialized, triggering explicit data load")
+        viewModelScope.launch {
+            _uiState.value = WisdomUiState.Loading
+            refreshData()
+        }
+    }
 
     init {
         Log.d(TAG, "MainViewModel initialized, collecting wisdom data")
@@ -253,7 +262,7 @@ class MainViewModel @Inject constructor(
                         _events.emit(UiEvent.WisdomActivated)
 
                         // Force refresh data with delay
-                        delay(100) // Small delay to ensure transaction completes
+                        delay(300) // Small delay to ensure transaction completes
                         Log.d(TAG, "Refreshing data after activation")
                         refreshData()
 
@@ -400,31 +409,39 @@ class MainViewModel @Inject constructor(
 
     // Data refresh method - updated for Result
     fun refreshData() {
-        viewModelScope.launch {
-            Log.d(TAG, "Explicitly refreshing data")
-            _uiState.value = WisdomUiState.Loading
-
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Get fresh data directly from each flow
-                val activeItems = wisdomRepository.getActiveWisdom().first()
-                val queuedItems = wisdomRepository.getQueuedWisdom().first()
-                val completedItems = wisdomRepository.getCompletedWisdom().first()
-                val activeCount = wisdomRepository.getActiveWisdomCount().first()
-                val completedCount = wisdomRepository.getCompletedWisdomCount().first()
+                Log.d(TAG, "Starting data refresh")
 
-                Log.d(TAG, "Refresh complete - Active: ${activeItems.size}, Queued: ${queuedItems.size}")
+                // Only show loading state if we don't already have data
+                val currentState = _uiState.value
+                if (currentState !is WisdomUiState.Success) {
+                    _uiState.emit(WisdomUiState.Loading)
+                }
 
-                _uiState.value = WisdomUiState.Success(
-                    activeWisdom = activeItems,
-                    queuedWisdom = queuedItems,
-                    completedWisdom = completedItems,
-                    activeCount = activeCount,
-                    completedCount = completedCount,
-                    serviceRunning = WisdomDisplayService.isServiceRunning
-                )
+                // Get fresh data with timeouts to prevent hangs
+                withTimeout(5000) {
+                    val activeItems = wisdomRepository.getActiveWisdom().first()
+                    val queuedItems = wisdomRepository.getQueuedWisdom().first()
+                    val completedItems = wisdomRepository.getCompletedWisdom().first()
+                    val activeCount = wisdomRepository.getActiveWisdomCount().first()
+                    val completedCount = wisdomRepository.getCompletedWisdomCount().first()
+
+                    Log.d(TAG, "Refresh complete - Active: ${activeItems.size}, Queued: ${queuedItems.size}")
+
+                    // Update UI state
+                    _uiState.emit(WisdomUiState.Success(
+                        activeWisdom = activeItems,
+                        queuedWisdom = queuedItems,
+                        completedWisdom = completedItems,
+                        activeCount = activeCount,
+                        completedCount = completedCount,
+                        serviceRunning = WisdomDisplayService.isServiceRunning
+                    ))
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error refreshing data", e)
-                _uiState.value = WisdomUiState.Error("Failed to refresh data: ${e.localizedMessage}")
+                _uiState.emit(WisdomUiState.Error("Failed to refresh data: ${e.localizedMessage}"))
             }
         }
     }

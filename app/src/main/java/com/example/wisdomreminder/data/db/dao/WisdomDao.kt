@@ -78,9 +78,13 @@ interface WisdomDao {
     suspend fun completeWisdom(completionDate: LocalDateTime = LocalDateTime.now())
 
     // Activate a wisdom
-    @Transaction
+    //@Transaction
+   // @Query("UPDATE wisdom SET isActive = 1, startDate = :startDate, currentDay = 1, exposuresToday = 0, exposuresTotal = 0, dateCompleted = NULL WHERE id = :wisdomId")
+   // suspend fun activateWisdom(wisdomId: Long, startDate: LocalDateTime = LocalDateTime.now()): Int
+
     @Query("UPDATE wisdom SET isActive = 1, startDate = :startDate, currentDay = 1, exposuresToday = 0, exposuresTotal = 0, dateCompleted = NULL WHERE id = :wisdomId")
-    suspend fun activateWisdom(wisdomId: Long, startDate: LocalDateTime = LocalDateTime.now()): Int
+    suspend fun activateWisdom(wisdomId: Long, startDate: LocalDateTime): Int
+
     // Search
     @Query("SELECT * FROM wisdom WHERE text LIKE '%' || :query || '%' OR source LIKE '%' || :query || '%' OR category LIKE '%' || :query || '%'")
     fun searchWisdom(query: String): Flow<List<WisdomEntity>>

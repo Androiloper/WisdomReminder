@@ -134,41 +134,40 @@ class WisdomRepository @Inject constructor(
     @Transaction
     override suspend fun activateWisdom(wisdomId: Long): Result<Boolean> {
         return try {
-            // Log the state before activation
-            if (BuildConfig.DEBUG) {
-                val beforeWisdom = wisdomDao.getWisdomById(wisdomId)
-                Log.d(TAG, "Before activation: isActive=${beforeWisdom?.isActive}, id=$wisdomId")
-            }
+            // Perform the activation and get the affected rows count
+            val rowsUpdated = wisdomDao.activateWisdom(wisdomId, LocalDateTime.now())
 
-            // Perform the activation
-            wisdomDao.activateWisdom(wisdomId, LocalDateTime.now())
+            // Check if any rows were updated
+            if (rowsUpdated <= 0) {
+                Log.w(TAG, "SQL update affected 0 rows. Using direct entity update.")
 
-            // Verify the change in debug mode
-            if (BuildConfig.DEBUG) {
-                val afterWisdom = wisdomDao.getWisdomById(wisdomId)
-                Log.d(TAG, "After activation: isActive=${afterWisdom?.isActive}, id=$wisdomId")
-
-                // If the activation didn't work, use fallback method
-                if (afterWisdom?.isActive != true) {
-                    Log.w(TAG, "Activation SQL update didn't set isActive=true. Using fallback.")
-
-                    val wisdom = wisdomDao.getWisdomById(wisdomId)
-                    if (wisdom != null) {
-                        val updatedWisdom = wisdom.copy(
-                            isActive = true,
-                            startDate = LocalDateTime.now(),
-                            currentDay = 1,
-                            exposuresToday = 0,
-                            exposuresTotal = 0,
-                            dateCompleted = null
-                        )
-                        wisdomDao.updateWisdom(updatedWisdom)
-                        Log.d(TAG, "Used fallback update to activate wisdom: $wisdomId")
-                    }
+                // Get the wisdom entity directly
+                val wisdom = wisdomDao.getWisdomById(wisdomId)
+                if (wisdom != null) {
+                    // Create updated entity with isActive=true
+                    val updatedWisdom = wisdom.copy(
+                        isActive = true,
+                        startDate = LocalDateTime.now(),
+                        currentDay = 1,
+                        exposuresToday = 0,
+                        exposuresTotal = 0,
+                        dateCompleted = null
+                    )
+                    // Update the entity directly
+                    wisdomDao.updateWisdom(updatedWisdom)
+                    Log.d(TAG, "Used direct entity update to activate wisdom: $wisdomId")
+                } else {
+                    return Result.failure(Exception("Wisdom with ID $wisdomId not found"))
                 }
             }
 
-            Log.d(TAG, "Activated wisdom: $wisdomId")
+            // Verify the activation worked
+            val verifiedWisdom = wisdomDao.getWisdomById(wisdomId)
+            if (verifiedWisdom?.isActive != true) {
+                return Result.failure(Exception("Failed to activate wisdom $wisdomId"))
+            }
+
+            Log.d(TAG, "Successfully activated wisdom: $wisdomId")
             Result.success(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error activating wisdom: $wisdomId", e)
