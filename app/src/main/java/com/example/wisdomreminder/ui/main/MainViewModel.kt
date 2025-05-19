@@ -20,23 +20,17 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.time.LocalDateTime
 import javax.inject.Inject
-
-
 import kotlinx.coroutines.flow.Flow
-
-import kotlinx.coroutines.flow.StateFlow
-
-
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -93,6 +87,21 @@ class MainViewModel @Inject constructor(
     private val _events = MutableSharedFlow<UiEvent>()
     val events = _events.asSharedFlow()
 
+    companion object {
+        private const val SELECTED_CATEGORIES_KEY = "selected_categories"
+    }
+
+
+    // Data class for combined flow results - add this inside the MainViewModel class
+    private data class CombinedFlowData(
+        val active: List<Wisdom>,
+        val queued: List<Wisdom>,
+        val completed: List<Wisdom>,
+        val activeCount: Int,
+        val completedCount: Int,
+        val allCategories: List<String>
+    )
+
     init {
         Log.d(TAG, "MainViewModel initialized, triggering explicit data load")
         viewModelScope.launch {
@@ -100,10 +109,7 @@ class MainViewModel @Inject constructor(
             loadSelectedCategories()
             refreshData()
         }
-    }
 
-    init {
-        Log.d(TAG, "MainViewModel initialized, collecting wisdom data")
         initializeDataCollection()
     }
 
@@ -137,25 +143,50 @@ class MainViewModel @Inject constructor(
             Log.d(TAG, "Starting to collect from repository flows")
 
             try {
-                // Combine the basic flows first
+                // Use the explicit Flow.combine() extension function with all flows as a single parameter
                 combine(
-                    wisdomRepository.getActiveWisdom(),
-                    wisdomRepository.getQueuedWisdom(),
-                    wisdomRepository.getCompletedWisdom(),
-                    wisdomRepository.getActiveWisdomCount(),
-                    wisdomRepository.getCompletedWisdomCount(),
-                    wisdomRepository.getAllCategories()
-                ) { active, queued, completed, activeCount, completedCount, allCategories ->
-                    // First part of the state without category wisdom
-                    Tuple(active, queued, completed, activeCount, completedCount, allCategories)
-                }.collect { tuple ->
+                    flowOf(wisdomRepository.getActiveWisdom()),
+                    flowOf(wisdomRepository.getQueuedWisdom()),
+                    flowOf(wisdomRepository.getCompletedWisdom()),
+                    flowOf(wisdomRepository.getActiveWisdomCount()),
+                    flowOf(wisdomRepository.getCompletedWisdomCount()),
+                    flowOf(wisdomRepository.getAllCategories())
+                ) { flows ->
+                    // Extract data from the flows array
+                    val activeFlow = flows[0] as Flow<List<Wisdom>>
+                    val queuedFlow = flows[1] as Flow<List<Wisdom>>
+                    val completedFlow = flows[2] as Flow<List<Wisdom>>
+                    val activeCountFlow = flows[3] as Flow<Int>
+                    val completedCountFlow = flows[4] as Flow<Int>
+                    val allCategoriesFlow = flows[5] as Flow<List<String>>
+
+                    // Collect all the data
+                    val active = activeFlow.first()
+                    val queued = queuedFlow.first()
+                    val completed = completedFlow.first()
+                    val activeCount = activeCountFlow.first()
+                    val completedCount = completedCountFlow.first()
+                    val allCategories = allCategoriesFlow.first()
+
+                    // Return a tuple-like data structure
+                    Triple(
+                        Triple(active, queued, completed),
+                        Pair(activeCount, completedCount),
+                        allCategories
+                    )
+                }.collect { result ->
+                    // Destructure the complex result
+                    val (wisdomTriple, countPair, allCategories) = result
+                    val (active, queued, completed) = wisdomTriple
+                    val (activeCount, completedCount) = countPair
+
                     val selectedCats = _selectedCategories.value
 
-                    // Now build the category wisdom map
+                    // Build category wisdom map
                     val categoryWisdomMap = mutableMapOf<String, List<Wisdom>>()
 
                     // Collect wisdom by each selected category
-                    selectedCats.forEach { category ->
+                    for (category in selectedCats) {
                         try {
                             val wisdomByCategory = wisdomRepository.getWisdomByCategory(category).first()
                             categoryWisdomMap[category] = wisdomByCategory
@@ -166,19 +197,17 @@ class MainViewModel @Inject constructor(
                     }
 
                     // Construct the final state
-                    val state = WisdomUiState.Success(
-                        activeWisdom = tuple.active,
-                        queuedWisdom = tuple.queued,
-                        completedWisdom = tuple.completed,
-                        activeCount = tuple.activeCount,
-                        completedCount = tuple.completedCount,
+                    _uiState.value = WisdomUiState.Success(
+                        activeWisdom = active,
+                        queuedWisdom = queued,
+                        completedWisdom = completed,
+                        activeCount = activeCount,
+                        completedCount = completedCount,
                         serviceRunning = WisdomDisplayService.isServiceRunning,
-                        allCategories = tuple.allCategories,
+                        allCategories = allCategories,
                         selectedCategories = selectedCats,
                         categoryWisdom = categoryWisdomMap
                     )
-
-                    _uiState.value = state
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Exception in data collection", e)
@@ -187,16 +216,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Helper class for managing multiple flow outputs
-    private data class Tuple(
-        val active: List<Wisdom>,
-        val queued: List<Wisdom>,
-        val completed: List<Wisdom>,
-        val activeCount: Int,
-        val completedCount: Int,
-        val allCategories: List<String>
-    )
-
     // Add a category to display on the main screen
     fun addCategory(category: String) {
         viewModelScope.launch {
@@ -207,11 +226,10 @@ class MainViewModel @Inject constructor(
                     _selectedCategories.value = currentCategories
                     saveSelectedCategories(currentCategories)
                     _events.emit(UiEvent.CategoryAdded)
-
-                    // Update UI with the new category
-                    refreshData()
-
                     Log.d(TAG, "Added category: $category")
+
+                    // Force refresh after category change
+                    refreshData()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error adding category", e)
@@ -229,11 +247,10 @@ class MainViewModel @Inject constructor(
                     _selectedCategories.value = currentCategories
                     saveSelectedCategories(currentCategories)
                     _events.emit(UiEvent.CategoryRemoved)
-
-                    // Update UI without the removed category
-                    refreshData()
-
                     Log.d(TAG, "Removed category: $category")
+
+                    // Force refresh after category change
+                    refreshData()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error removing category", e)
@@ -242,7 +259,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Get wisdom by ID - updated for Result
+    // Get wisdom by ID
     fun getWisdomById(id: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -264,7 +281,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Add new wisdom - updated for Result
+    // Add new wisdom
     fun addWisdom(text: String, source: String, category: String) {
         if (text.isBlank()) return
 
@@ -305,172 +322,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    companion object {
-        private const val SELECTED_CATEGORIES_KEY = "selected_categories"
-    }
-
-    // Update existing methods to support category functionality
-    // Data refresh method - updated for Result and to include category data
-    fun refreshData() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                Log.d(TAG, "Starting data refresh")
-
-                // Only show loading state if we don't already have data
-                val currentState = _uiState.value
-                if (currentState !is WisdomUiState.Success) {
-                    _uiState.emit(WisdomUiState.Loading)
-                }
-
-                // Get fresh data with timeouts to prevent hangs
-                withTimeout(5000) {
-                    val activeItems = wisdomRepository.getActiveWisdom().first()
-                    val queuedItems = wisdomRepository.getQueuedWisdom().first()
-                    val completedItems = wisdomRepository.getCompletedWisdom().first()
-                    val activeCount = wisdomRepository.getActiveWisdomCount().first()
-                    val completedCount = wisdomRepository.getCompletedWisdomCount().first()
-                    val allCategories = wisdomRepository.getAllCategories().first()
-                    val selectedCats = _selectedCategories.value
-
-                    // Get wisdom for each selected category
-                    val categoryWisdomMap = mutableMapOf<String, List<Wisdom>>()
-                    selectedCats.forEach { category ->
-                        try {
-                            val wisdomByCategory = wisdomRepository.getWisdomByCategory(category).first()
-                            categoryWisdomMap[category] = wisdomByCategory
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error getting wisdom for category: $category", e)
-                            categoryWisdomMap[category] = emptyList()
-                        }
-                    }
-
-                    Log.d(TAG, "Refresh complete - Active: ${activeItems.size}, Queued: ${queuedItems.size}")
-
-                    // Update UI state
-                    _uiState.emit(WisdomUiState.Success(
-                        activeWisdom = activeItems,
-                        queuedWisdom = queuedItems,
-                        completedWisdom = completedItems,
-                        activeCount = activeCount,
-                        completedCount = completedCount,
-                        serviceRunning = WisdomDisplayService.isServiceRunning,
-                        allCategories = allCategories,
-                        selectedCategories = selectedCats,
-                        categoryWisdom = categoryWisdomMap
-                    ))
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error refreshing data", e)
-                _uiState.emit(WisdomUiState.Error("Failed to refresh data: ${e.localizedMessage}"))
-            }
-        }
-    }
-
-    // Add a category to display on the main screen
-    fun addCategory(category: String) {
-        viewModelScope.launch {
-            try {
-                val currentCategories = _selectedCategories.value.toMutableList()
-                if (category !in currentCategories) {
-                    currentCategories.add(category)
-                    _selectedCategories.value = currentCategories
-                    saveSelectedCategories(currentCategories)
-                    _events.emit(UiEvent.CategoryAdded)
-                    Log.d(TAG, "Added category: $category")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error adding category", e)
-                _events.emit(UiEvent.Error("Failed to add category: ${e.localizedMessage}"))
-            }
-        }
-    }
-
-    // Remove a category from display
-    fun removeCategory(category: String) {
-        viewModelScope.launch {
-            try {
-                val currentCategories = _selectedCategories.value.toMutableList()
-                if (currentCategories.remove(category)) {
-                    _selectedCategories.value = currentCategories
-                    saveSelectedCategories(currentCategories)
-                    _events.emit(UiEvent.CategoryRemoved)
-                    Log.d(TAG, "Removed category: $category")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error removing category", e)
-                _events.emit(UiEvent.Error("Failed to remove category: ${e.localizedMessage}"))
-            }
-        }
-    }
-
-    // Get wisdom by ID - updated for Result
-    fun getWisdomById(id: Long) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val result = wisdomRepository.getWisdomById(id)
-
-                result.fold(
-                    onSuccess = { wisdom ->
-                        _selectedWisdom.value = wisdom
-                    },
-                    onFailure = { error ->
-                        Log.e(TAG, "Error getting wisdom by ID: $id", error)
-                        _events.emit(UiEvent.Error("Could not load wisdom details"))
-                    }
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Exception in getWisdomById", e)
-                _events.emit(UiEvent.Error("An unexpected error occurred"))
-            }
-        }
-    }
-
-    // Add new wisdom - updated for Result
-    fun addWisdom(text: String, source: String, category: String) {
-        if (text.isBlank()) return
-
-        Log.d(TAG, "Adding wisdom: $text, $source, $category")
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val wisdom = Wisdom(
-                    text = text,
-                    source = source,
-                    category = category,
-                    dateCreated = LocalDateTime.now(),
-                    isActive = false,
-                    dateCompleted = null
-                )
-
-                val result = wisdomRepository.addWisdom(wisdom)
-
-                result.fold(
-                    onSuccess = { id ->
-                        if (id > 0) {
-                            _events.emit(UiEvent.WisdomAdded)
-                            Log.d(TAG, "Wisdom added successfully with ID: $id")
-                            refreshData()
-                            debugDatabaseContents()
-                        } else {
-                            _events.emit(UiEvent.Error("Failed to add wisdom (invalid ID)"))
-                        }
-                    },
-                    onFailure = { error ->
-                        Log.e(TAG, "Error adding wisdom", error)
-                        _events.emit(UiEvent.Error("Failed to add wisdom: ${error.localizedMessage}"))
-                    }
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Exception in addWisdom", e)
-                _events.emit(UiEvent.Error("An unexpected error occurred while adding wisdom"))
-            }
-        }
-    }
-
-    companion object {
-        private const val SELECTED_CATEGORIES_KEY = "selected_categories"
-    }
-
-    // Update wisdom - updated for Result
+    // Update wisdom
     fun updateWisdom(wisdom: Wisdom) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -499,7 +351,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Delete wisdom - updated for Result
+    // Delete wisdom
     fun deleteWisdom(wisdom: Wisdom) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -528,13 +380,13 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Activate wisdom - updated for Result
+    // Activate wisdom
     fun activateWisdom(wisdomId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 Log.d(TAG, "ViewModel: Activating wisdom with ID: $wisdomId")
 
-                // Check active count (existing code)
+                // Check active count
                 val currentActiveCount = (uiState.value as? WisdomUiState.Success)?.activeCount ?: 0
                 if (currentActiveCount >= 3) {
                     _events.emit(UiEvent.Error("You can only have up to 3 active wisdom items at once"))
@@ -694,7 +546,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Data refresh method - updated for Result
+    // Data refresh method
     fun refreshData() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -713,6 +565,20 @@ class MainViewModel @Inject constructor(
                     val completedItems = wisdomRepository.getCompletedWisdom().first()
                     val activeCount = wisdomRepository.getActiveWisdomCount().first()
                     val completedCount = wisdomRepository.getCompletedWisdomCount().first()
+                    val allCategories = wisdomRepository.getAllCategories().first()
+                    val selectedCats = _selectedCategories.value
+
+                    // Get wisdom for each selected category
+                    val categoryWisdomMap = mutableMapOf<String, List<Wisdom>>()
+                    selectedCats.forEach { category ->
+                        try {
+                            val wisdomByCategory = wisdomRepository.getWisdomByCategory(category).first()
+                            categoryWisdomMap[category] = wisdomByCategory
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error getting wisdom for category: $category", e)
+                            categoryWisdomMap[category] = emptyList()
+                        }
+                    }
 
                     Log.d(TAG, "Refresh complete - Active: ${activeItems.size}, Queued: ${queuedItems.size}")
 
@@ -723,7 +589,10 @@ class MainViewModel @Inject constructor(
                         completedWisdom = completedItems,
                         activeCount = activeCount,
                         completedCount = completedCount,
-                        serviceRunning = WisdomDisplayService.isServiceRunning
+                        serviceRunning = WisdomDisplayService.isServiceRunning,
+                        allCategories = allCategories,
+                        selectedCategories = selectedCats,
+                        categoryWisdom = categoryWisdomMap
                     ))
                 }
             } catch (e: Exception) {
@@ -758,4 +627,3 @@ class MainViewModel @Inject constructor(
         }
     }
 }
-//

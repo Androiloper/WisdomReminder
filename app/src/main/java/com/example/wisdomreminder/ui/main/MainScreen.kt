@@ -42,6 +42,7 @@ import com.example.wisdomreminder.ui.theme.*
 import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
 import com.example.wisdomreminder.ui.wisdom.QueuedWisdomItem
 import java.time.format.DateTimeFormatter
+import com.example.wisdomreminder.ui.components.CategoryExplorerCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -474,6 +475,19 @@ fun MainScreen(
                             }
                         }
 
+                        // Wisdom Explorer Section
+                        Text(
+                            text = "WISDOM EXPLORER",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = NeonPink,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+
+// Display the wisdom explorer cards with circular background
+                        CategoryExplorerCard(
+                            allWisdom = allWisdom, // This comes from your state.activeWisdom + state.queuedWisdom + state.completedWisdom
+                            onWisdomClick = { id: Long -> onWisdomClick(id) }
+                        )
                         // ALL WISDOM Section
                         Spacer(modifier = Modifier.height(16.dp))
 
