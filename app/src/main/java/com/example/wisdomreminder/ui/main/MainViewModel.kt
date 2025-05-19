@@ -53,9 +53,10 @@ class MainViewModel @Inject constructor(
             val activeCount: Int = 0,
             val completedCount: Int = 0,
             val serviceRunning: Boolean = false,
-            val allCategories: List<String> = emptyList(),
-            val selectedCategories: List<String> = emptyList(),
-            val categoryWisdom: Map<String, List<Wisdom>> = emptyMap()
+            val allCategories: List<String> = emptyList() // This is important for the filter
+            // We can remove the following two from the original since we won't use them anymore:
+            // val selectedCategories: List<String> = emptyList(),
+            // val categoryWisdom: Map<String, List<Wisdom>> = emptyMap()
         ) : WisdomUiState()
         data class Error(val message: String) : WisdomUiState()
     }
@@ -205,8 +206,8 @@ class MainViewModel @Inject constructor(
                         completedCount = completedCount,
                         serviceRunning = WisdomDisplayService.isServiceRunning,
                         allCategories = allCategories,
-                        selectedCategories = selectedCats,
-                        categoryWisdom = categoryWisdomMap
+                        //selectedCategories = selectedCats,
+                        //categoryWisdom = categoryWisdomMap
                     )
                 }
             } catch (e: Exception) {
@@ -566,21 +567,9 @@ class MainViewModel @Inject constructor(
                     val activeCount = wisdomRepository.getActiveWisdomCount().first()
                     val completedCount = wisdomRepository.getCompletedWisdomCount().first()
                     val allCategories = wisdomRepository.getAllCategories().first()
-                    val selectedCats = _selectedCategories.value
-
-                    // Get wisdom for each selected category
-                    val categoryWisdomMap = mutableMapOf<String, List<Wisdom>>()
-                    selectedCats.forEach { category ->
-                        try {
-                            val wisdomByCategory = wisdomRepository.getWisdomByCategory(category).first()
-                            categoryWisdomMap[category] = wisdomByCategory
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error getting wisdom for category: $category", e)
-                            categoryWisdomMap[category] = emptyList()
-                        }
-                    }
 
                     Log.d(TAG, "Refresh complete - Active: ${activeItems.size}, Queued: ${queuedItems.size}")
+                    Log.d(TAG, "All categories: ${allCategories.size}")
 
                     // Update UI state
                     _uiState.emit(WisdomUiState.Success(
@@ -590,9 +579,7 @@ class MainViewModel @Inject constructor(
                         activeCount = activeCount,
                         completedCount = completedCount,
                         serviceRunning = WisdomDisplayService.isServiceRunning,
-                        allCategories = allCategories,
-                        selectedCategories = selectedCats,
-                        categoryWisdom = categoryWisdomMap
+                        allCategories = allCategories
                     ))
                 }
             } catch (e: Exception) {

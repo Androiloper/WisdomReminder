@@ -1,23 +1,12 @@
 package com.example.wisdomreminder.ui.components
 
-
-
+import android.util.Log
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
@@ -26,14 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -55,17 +37,29 @@ import kotlinx.coroutines.launch
 
 /**
  * A card component that displays wisdom in a circular explorer view
- * similar to the design shown in the screenshot
+ * with category filtering capabilities
  */
 @Composable
 fun CategoryExplorerCard(
     allWisdom: List<Wisdom>,
+    selectedCategory: String?,
+    allCategories: List<String>,
     onWisdomClick: (Long) -> Unit,
+    onCategorySelected: (String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (allWisdom.isEmpty()) {
+    // Filter wisdom by category if needed
+    val filteredWisdom = if (selectedCategory != null) {
+        allWisdom.filter { it.category == selectedCategory }
+    } else {
+        allWisdom
+    }
+
+    Log.d("CategoryExplorerCard", "Filtered wisdom: ${filteredWisdom.size} items from ${allWisdom.size}")
+
+    if (filteredWisdom.isEmpty()) {
         // Empty state
-        EmptyExplorerCard(modifier)
+        EmptyExplorerCard(modifier, selectedCategory)
         return
     }
 
@@ -87,171 +81,47 @@ fun CategoryExplorerCard(
         }
     }
 
+    // Reset current index when the category filter changes
+    LaunchedEffect(selectedCategory) {
+        currentIndex = 0
+    }
+
+
+
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Section title
-        Text(
-            text = "WISDOM EXPLORER",
-            style = MaterialTheme.typography.titleLarge,
-            color = NeonPink,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        // Circular background container
-        Box(
+        // Section title with category filter
+        Row(
             modifier = Modifier
-                .size(280.dp)
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            NebulaPurple.copy(alpha = 0.7f),
-                            NebulaPurple.copy(alpha = 0.3f)
-                        )
-                    ),
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .padding(bottom = 0.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Current wisdom
-            val currentWisdom = allWisdom[currentIndex]
 
-            // Animation for card transitions
-            val offsetX by animateFloatAsState(
-                targetValue = 0f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessLow
-                ),
-                label = "card offset"
-            )
-
-            // Card with wisdom content
-            GlassCard(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .fillMaxWidth(0.85f)
-                    .aspectRatio(1.6f)
-                    .clickable(enabled = !isAnimating) { onWisdomClick(currentWisdom.id) }
-                    .then(CosmicAnimations.floatEffect(floatMagnitude = 2f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    // Category pill/badge
-                    Box(
-                        modifier = Modifier
-                            .clip(MaterialTheme.shapes.small)
-                            .background(NebulaPurple.copy(alpha = 0.3f))
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = currentWisdom.category.uppercase(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = NebulaPurple
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Wisdom text
-                    Text(
-                        text = "\"${currentWisdom.text}\"",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = StarWhite,
-                        textAlign = TextAlign.Center,
-                        maxLines = 4,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Source (if available)
-                    if (currentWisdom.source.isNotBlank()) {
-                        Text(
-                            text = currentWisdom.source,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontStyle = FontStyle.Italic
-                            ),
-                            color = CyberBlue,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-
-            // Navigation arrows
-            if (showNavIndicators || isAnimating) {
-                // Left arrow (previous)
-                if (currentIndex > 0) {
-                    IconButton(
-                        onClick = {
-                            if (!isAnimating) {
-                                isAnimating = true
-                                coroutineScope.launch {
-                                    currentIndex--
-                                    delay(300)
-                                    isAnimating = false
-                                }
-                            }
-                        },
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .padding(start = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowLeft,
-                            contentDescription = "Previous",
-                            tint = ElectricGreen.copy(alpha = 0.8f),
-                            modifier = Modifier.scale(1.5f)
-                        )
-                    }
-                }
-
-                // Right arrow (next)
-                if (currentIndex < allWisdom.size - 1) {
-                    IconButton(
-                        onClick = {
-                            if (!isAnimating) {
-                                isAnimating = true
-                                coroutineScope.launch {
-                                    currentIndex++
-                                    delay(300)
-                                    isAnimating = false
-                                }
-                            }
-                        },
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .padding(end = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowRight,
-                            contentDescription = "Next",
-                            tint = ElectricGreen.copy(alpha = 0.8f),
-                            modifier = Modifier.scale(1.5f)
-                        )
-                    }
-                }
-            }
         }
 
-        // Page indicator dots
-        Box(
+        // Section title with category filter
+        Row(
             modifier = Modifier
-                .padding(top = 8.dp)
+                .fillMaxWidth()
+                .padding(bottom = 0.dp),
+            horizontalArrangement = Arrangement.Absolute.Right,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            PageIndicator(
-                pageCount = allWisdom.size,
-                currentPage = currentIndex
+
+            // Category filter
+            CategoryFilter(
+                allCategories = allCategories,
+                selectedCategory = selectedCategory,
+                onCategorySelected = onCategorySelected
+
             )
+
         }
+
     }
 }
 
@@ -259,17 +129,30 @@ fun CategoryExplorerCard(
  * Empty state for when there are no wisdom items
  */
 @Composable
-private fun EmptyExplorerCard(modifier: Modifier = Modifier) {
+private fun EmptyExplorerCard(
+    modifier: Modifier = Modifier,
+    selectedCategory: String? = null
+) {
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "WISDOM EXPLORER",
-            style = MaterialTheme.typography.titleLarge,
-            color = NeonPink,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        // Section title
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "WISDOM EXPLORER",
+                style = MaterialTheme.typography.titleLarge,
+                color = NeonPink
+            )
+        }
+
+        // Category filter will be rendered by parent component
 
         Box(
             modifier = Modifier
@@ -296,10 +179,14 @@ private fun EmptyExplorerCard(modifier: Modifier = Modifier) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Add wisdom to start your journey",
+                        text = if (selectedCategory != null)
+                            "No wisdom in the \"$selectedCategory\" category"
+                        else
+                            "Add wisdom to start your journey",
                         style = MaterialTheme.typography.bodyMedium,
                         color = StarWhite.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(16.dp)
                     )
                 }
             }

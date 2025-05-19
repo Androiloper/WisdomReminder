@@ -1,5 +1,6 @@
 package com.example.wisdomreminder.ui.main
 
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
@@ -56,6 +57,14 @@ fun MainScreen(
     val context = LocalContext.current
     var showAddWisdomDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+
+    // Add this state to store the selected category
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+
+
+
+
+
 
     // Collect events
     LaunchedEffect(Unit) {
@@ -272,6 +281,9 @@ fun MainScreen(
                         // Combine all wisdom for swiping through
                         val allWisdom = state.activeWisdom + state.queuedWisdom + state.completedWisdom
 
+                        // Get all available categories
+                        val allCategories = state.allCategories
+
                         Text(
                             text = "WISDOM EXPLORER",
                             style = MaterialTheme.typography.titleLarge,
@@ -279,20 +291,35 @@ fun MainScreen(
                             modifier = Modifier.padding(top = 8.dp)
                         )
 
+                        Spacer(modifier = Modifier.height(16.dp))
+
+
+
+                        // Display the wisdom explorer cards with circular background
+                        CategoryExplorerCard(
+                            allWisdom = allWisdom,
+                            selectedCategory = selectedCategory,
+                            allCategories = allCategories,
+                            onWisdomClick = { id -> onWisdomClick(id) },
+                            onCategorySelected = { category -> selectedCategory = category }
+                        )
+
+
+
+
+
+
+
                         // Fixed SwipeableWisdomCards with explicit type
                         SwipeableWisdomCards(
                             allWisdom = allWisdom,
                             onWisdomClick = { id: Long -> onWisdomClick(id) }
                         )
 
-                        // Category Cards Section
-                        Text(
-                            text = "CATEGORY CARDS",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = CyberBlue,
-                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                        )
 
+
+
+                        /*
                         // Current category cards
                         if (state.selectedCategories.isEmpty()) {
                             // Empty state
@@ -314,29 +341,46 @@ fun MainScreen(
                                 }
                             }
                         } else {
-                            // Display category cards
+                            // Display category cards - improved implementation
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
+                                Log.d("MainScreen", "Rendering ${state.selectedCategories.size} categories")
+                                Log.d("MainScreen", "Category map has ${state.categoryWisdom.size} categories")
+
                                 state.selectedCategories.forEach { category ->
+                                    Log.d("MainScreen", "Rendering category: $category")
                                     val wisdomList = state.categoryWisdom[category] ?: emptyList()
+                                    Log.d("MainScreen", "Category $category has ${wisdomList.size} items")
+
                                     // Fixed CategoryWisdomCard call with explicit types
-                                    CategoryWisdomCard(
-                                        category = category,
-                                        wisdomList = wisdomList,
-                                        onWisdomClick = { id: Long -> onWisdomClick(id) },
-                                        onRemove = { viewModel.removeCategory(category) }
+                                    // Display the wisdom explorer cards with circular background
+                                    CategoryExplorerCard(
+                                        allWisdom = allWisdom,
+                                        selectedCategory = selectedCategory,
+                                        allCategories = allCategories,
+                                        onWisdomClick = { id -> onWisdomClick(id) },
+                                        onCategorySelected = { category -> selectedCategory = category }
                                     )
                                 }
                             }
                         }
 
+
+                         */
+
+
+
+                        /*
                         // Add Category Button
                         var showCategorySelectionDialog by remember { mutableStateOf(false) }
 
                         Button(
-                            onClick = { showCategorySelectionDialog = true },
+                            onClick = {
+                                Log.d("MainScreen", "Opening category selection dialog")
+                                showCategorySelectionDialog = true
+                            },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = CyberBlue.copy(alpha = 0.8f)
                             ),
@@ -353,17 +397,23 @@ fun MainScreen(
                             Text("ADD CATEGORY CARD")
                         }
 
-                        // Category Selection Dialog
+                         */
+
+                        /*
+// Category Selection Dialog
                         if (showCategorySelectionDialog) {
                             CategorySelectionDialog(
                                 availableCategories = state.allCategories,
                                 selectedCategories = state.selectedCategories,
                                 onDismiss = { showCategorySelectionDialog = false },
                                 onCategorySelected = { category ->
+                                    Log.d("MainScreen", "Selected category: $category")
                                     viewModel.addCategory(category)
                                 }
                             )
                         }
+
+                         */
 
                         Spacer(modifier = Modifier.height(16.dp))
 
@@ -475,19 +525,11 @@ fun MainScreen(
                             }
                         }
 
-                        // Wisdom Explorer Section
-                        Text(
-                            text = "WISDOM EXPLORER",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = NeonPink,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
 
-// Display the wisdom explorer cards with circular background
-                        CategoryExplorerCard(
-                            allWisdom = allWisdom, // This comes from your state.activeWisdom + state.queuedWisdom + state.completedWisdom
-                            onWisdomClick = { id: Long -> onWisdomClick(id) }
-                        )
+
+
+
+
                         // ALL WISDOM Section
                         Spacer(modifier = Modifier.height(16.dp))
 

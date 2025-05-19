@@ -1,5 +1,6 @@
 package com.example.wisdomreminder.ui.components
 
+import android.util.Log
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -56,6 +58,11 @@ fun CategoryWisdomCard(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+
+    Log.d("CategoryWisdomCard", "Rendering category: $category with ${wisdomList.size} items")
+    wisdomList.forEachIndexed { index, wisdom ->
+        Log.d("CategoryWisdomCard", "Item $index: ${wisdom.text.take(20)}...")
+    }
 
     GlassCard(
         modifier = modifier
@@ -117,7 +124,10 @@ fun CategoryWisdomCard(
 
                     // Expand/collapse button
                     IconButton(
-                        onClick = { expanded = !expanded },
+                        onClick = {
+                            expanded = !expanded
+                            Log.d("CategoryWisdomCard", "Category $category expanded: $expanded")
+                        },
                         modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
@@ -154,7 +164,10 @@ fun CategoryWisdomCard(
                         state = listState,
                         modifier = Modifier.height(240.dp)
                     ) {
-                        items(wisdomList) { wisdom ->
+                        items(
+                            items = wisdomList,
+                            key = { it.id } // Use stable ID as key for better list updates
+                        ) { wisdom ->
                             CategoryWisdomItem(
                                 wisdom = wisdom,
                                 onClick = { onWisdomClick(wisdom.id) }
