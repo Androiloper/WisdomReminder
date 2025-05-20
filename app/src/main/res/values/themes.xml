@@ -1,23 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Base application theme. -->
-    <style name="Theme.WisdomReminder" parent="Theme.Material3.Dark.NoActionBar">
+    <!-- Base application theme using Material3 -->
+    <style name="Theme.WisdomReminder" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Primary brand color. -->
-        <item name="colorPrimary">@color/nebula_purple</item>
-        <item name="colorPrimaryVariant">@color/cyber_blue</item>
-        <item name="colorOnPrimary">@color/star_white</item>
+        <item name="colorPrimary">@color/Purple40</item>
+        <item name="colorPrimaryContainer">@color/Purple80</item>
+        <item name="colorOnPrimary">@android:color/white</item>
         <!-- Secondary brand color. -->
-        <item name="colorSecondary">@color/electric_green</item>
-        <item name="colorSecondaryVariant">@color/neon_pink</item>
-        <item name="colorOnSecondary">@color/star_white</item>
+        <item name="colorSecondary">@color/PurpleGrey40</item>
+        <item name="colorSecondaryContainer">@color/PurpleGrey80</item>
+        <item name="colorOnSecondary">@android:color/white</item>
+        <!-- Tertiary brand color -->
+        <item name="colorTertiary">@color/Pink40</item>
+        <item name="colorTertiaryContainer">@color/Pink80</item>
+        <item name="colorOnTertiary">@android:color/white</item>
         <!-- Status bar color. -->
-        <item name="android:statusBarColor">@color/deep_space</item>
-        <!-- Navigation bar color -->
-        <item name="android:navigationBarColor">@color/deep_space</item>
-        <!-- Background color -->
-        <item name="android:windowBackground">@color/deep_space</item>
-        <!-- Customize your theme here. -->
-        <item name="android:textColor">@color/star_white</item>
+        <item name="android:statusBarColor">?attr/colorPrimary</item>
     </style>
-
 </resources>
