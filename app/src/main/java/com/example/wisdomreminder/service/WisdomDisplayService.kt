@@ -3,7 +3,7 @@ package com.example.wisdomreminder.service
 import android.animation.ValueAnimator
 import android.app.KeyguardManager
 import android.app.NotificationChannel
-import android.app.NotificationManager
+import android.app.NotificationManager as SystemNotificationManager // aliased
 import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager // added
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
@@ -26,15 +27,18 @@ import androidx.core.app.NotificationCompat
 import com.example.wisdomreminder.R
 import com.example.wisdomreminder.data.repository.WisdomRepository
 import com.example.wisdomreminder.ui.main.MainActivity
+import com.example.wisdomreminder.ui.main.MainViewModel
 import com.example.wisdomreminder.util.SwipeDismissTouchListener
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -44,17 +48,15 @@ class WisdomDisplayService : Service() {
         const val CHANNEL_ID = "wisdom_channel"
         const val NOTIFICATION_ID = 1
         const val TAG = "WisdomDisplayService"
-
-        // Action and extras
         const val ACTION_START_SERVICE = "com.example.wisdomreminder.START_SERVICE"
         const val ACTION_STOP_SERVICE = "com.example.wisdomreminder.STOP_SERVICE"
         const val ACTION_DISPLAY_WISDOM = "com.example.wisdomreminder.DISPLAY_WISDOM"
         const val EXTRA_WISDOM_ID = "wisdom_id"
 
-        // Flag to track if service is running
-        @Volatile
-        var isServiceRunning = false
-            private set
+        // Service status tracking with AtomicBoolean for thread safety
+        private val _isRunning = AtomicBoolean(false)
+        val isServiceRunning: Boolean
+            get() = _isRunning.get()
     }
 
     @Inject
@@ -65,40 +67,82 @@ class WisdomDisplayService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val screenReceiver = ScreenReceiver()
-    private var lastDisplayTime = 0L // Track when the last wisdom was shown
-    private var animator: ValueAnimator? = null  // Store animator reference for cleanup
+    private var lastDisplayTime = 0L
+    private val displayCooldownMillis = 10000L // Cooldown of 10 seconds for random display
+    private var animator: ValueAnimator? = null
+    private var monitorJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service onCreate")
         createNotificationChannel()
-
         try {
             startForeground(NOTIFICATION_ID, createNotification())
             windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-
             val filter = IntentFilter().apply {
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
-                addAction(Intent.ACTION_USER_PRESENT)
+                addAction(Intent.ACTION_USER_PRESENT) // Device unlocked
                 addAction(ACTION_STOP_SERVICE)
                 addAction(ACTION_DISPLAY_WISDOM)
             }
-            registerReceiver(screenReceiver, filter, RECEIVER_NOT_EXPORTED)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(screenReceiver, filter, RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                registerReceiver(screenReceiver, filter)
+            }
 
-            isServiceRunning = true
+            // Set service as running and notify
+            _isRunning.set(true)
+            notifyServiceStatus(true)
+
+            // Start monitoring job to periodically update status
+            startMonitorJob()
+
+            Log.d(TAG, "WisdomDisplayService successfully started")
         } catch (e: Exception) {
             Log.e(TAG, "Service initialization failed: ${e.message}", e)
+            _isRunning.set(false)
+            notifyServiceStatus(false)
             stopSelf()
+        }
+    }
+
+    private fun startMonitorJob() {
+        monitorJob?.cancel()
+        monitorJob = serviceScope.launch {
+            try {
+                while(true) {
+                    notifyServiceStatus(true)
+                    delay(30000) // Send status update every 30 seconds
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in monitor job", e)
+            }
+        }
+    }
+
+    private fun notifyServiceStatus(isRunning: Boolean) {
+        try {
+            val intent = Intent(MainViewModel.ACTION_SERVICE_STATUS_CHANGE).apply {
+                putExtra(MainViewModel.EXTRA_IS_RUNNING, isRunning)
+            }
+            sendBroadcast(intent)
+            Log.d(TAG, "Service status broadcast sent: running=$isRunning")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send service status broadcast", e)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service onStartCommand: ${intent?.action}")
-
         when (intent?.action) {
             ACTION_START_SERVICE -> {
                 Log.d(TAG, "Received START_SERVICE action")
+                // Set status and notify
+                _isRunning.set(true)
+                notifyServiceStatus(true)
             }
             ACTION_STOP_SERVICE -> {
                 Log.d(TAG, "Received STOP_SERVICE action, stopping service")
@@ -106,30 +150,35 @@ class WisdomDisplayService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_DISPLAY_WISDOM -> {
-                // Display wisdom
                 val wisdomId = intent.getLongExtra(EXTRA_WISDOM_ID, -1L)
                 if (wisdomId != -1L) {
-                    serviceScope.launch {
-                        displayWisdomById(wisdomId)
-                    }
+                    serviceScope.launch { displayWisdomById(wisdomId) }
                 }
             }
         }
-
         return START_STICKY
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         Log.d(TAG, "Service onDestroy")
+
+        // Cancel all jobs first
+        monitorJob?.cancel()
+
         try {
             unregisterReceiver(screenReceiver)
         } catch (e: Exception) {
             Log.e(TAG, "Error unregistering receiver: ${e.message}")
         }
-        hideWisdom()
+
+        hideWisdom() // Ensure animator is cancelled
         serviceScope.cancel()
-        isServiceRunning = false
+
+        // Set service as not running and notify
+        _isRunning.set(false)
+        notifyServiceStatus(false)
+
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -137,27 +186,21 @@ class WisdomDisplayService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Wisdom Reminders",
-                NotificationManager.IMPORTANCE_LOW
+                CHANNEL_ID, "Wisdom Reminders", SystemNotificationManager.IMPORTANCE_LOW
             ).apply {
                 setShowBadge(false)
                 description = "Shows wisdom reminders throughout the day"
             }
-
-            val notificationManager = getSystemService(NotificationManager::class.java)
+            val notificationManager = getSystemService(SystemNotificationManager::class.java)
             notificationManager.createNotificationChannel(channel)
         }
     }
 
     private fun createNotification(): android.app.Notification {
         val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
+            this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
         )
-
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.service_notification_title))
             .setContentText(getString(R.string.service_notification_text))
@@ -168,207 +211,172 @@ class WisdomDisplayService : Service() {
     }
 
     private suspend fun displayWisdomById(wisdomId: Long) {
-        if (!Settings.canDrawOverlays(this)) {
-            Log.e(TAG, "Cannot show wisdom: no overlay permission")
-            return
-        }
+        if (!canDisplayOverlay()) return
 
-        // Prevent showing wisdom too frequently
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastDisplayTime < 2000) {
-            Log.d(TAG, "Preventing wisdom display - too soon after last display")
-            return
-        }
-
-        lastDisplayTime = currentTime
-
-        // Get the wisdom by ID
         wisdomRepository.getWisdomById(wisdomId).onSuccess { wisdom ->
             if (wisdom != null) {
-                // Record exposure
-                wisdomRepository.recordExposure(wisdomId)
-
-                // Display the wisdom
-                displayWisdom(wisdom.text, wisdom.source)
-            } else {
-                Log.e(TAG, "Wisdom not found: $wisdomId")
-            }
-        }.onFailure { error ->
-            Log.e(TAG, "Error retrieving wisdom: $wisdomId", error)
-        }
+                wisdomRepository.recordExposure(wisdomId) // Record exposure first
+                displayWisdomOnScreen(wisdom.text, wisdom.source)
+            } else Log.e(TAG, "Wisdom not found: $wisdomId")
+        }.onFailure { error -> Log.e(TAG, "Error retrieving wisdom: $wisdomId", error) }
     }
 
     private suspend fun showRandomWisdom() {
+        if (!canDisplayOverlay()) return
+
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastDisplayTime < displayCooldownMillis) {
+            Log.d(TAG, "Preventing wisdom display - cooldown active")
+            return
+        }
+        lastDisplayTime = currentTime
+
         try {
-            // Get all active wisdom
             val activeWisdom = wisdomRepository.getActiveWisdom().first()
-
             if (activeWisdom.isNotEmpty()) {
-                // Choose a random wisdom
-                val randomWisdom = activeWisdom.random()
-
-                // Record exposure
-                wisdomRepository.recordExposure(randomWisdom.id).onSuccess { success ->
-                    // Display it
-                    displayWisdom(randomWisdom.text, randomWisdom.source)
-                }
-            } else {
-                Log.d(TAG, "No active wisdom to display")
-            }
+                val randomWisdom = activeWisdom.minByOrNull { it.exposuresToday } ?: activeWisdom.random()
+                wisdomRepository.recordExposure(randomWisdom.id)
+                displayWisdomOnScreen(randomWisdom.text, randomWisdom.source)
+            } else Log.d(TAG, "No active wisdom to display randomly")
         } catch (e: Exception) {
             Log.e(TAG, "Error showing random wisdom: ${e.message}", e)
         }
     }
 
-    private fun displayWisdom(text: String, source: String) {
-        try {
-            // Cancel any existing animation
-            animator?.cancel()
+    private fun canDisplayOverlay(): Boolean {
+        if (!Settings.canDrawOverlays(this)) {
+            Log.e(TAG, "Cannot show wisdom: no overlay permission")
+            // Optionally, send a broadcast or event to MainActivity to request permission
+            return false
+        }
+        return true
+    }
 
-            // Remove any existing view first
-            if (wisdomView != null) {
-                try {
-                    windowManager.removeView(wisdomView)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error removing existing view: ${e.message}")
+
+    private fun displayWisdomOnScreen(text: String, source: String) {
+        mainHandler.post {
+            try {
+                animator?.cancel()
+
+                if (wisdomView != null) {
+                    try { if(wisdomView?.isAttachedToWindow == true) windowManager.removeView(wisdomView) } // Check if attached
+                    catch (e: Exception) { Log.e(TAG, "Error removing existing view: ${e.message}") }
+                    wisdomView = null
                 }
-                wisdomView = null
-            }
 
-            val inflater = LayoutInflater.from(this)
-            wisdomView = inflater.inflate(R.layout.wisdom_overlay, null)
+                val inflater = LayoutInflater.from(this)
+                wisdomView = inflater.inflate(R.layout.wisdom_overlay, null)
 
-            val wisdomText = wisdomView?.findViewById<TextView>(R.id.wisdom_text)
-            val wisdomSource = wisdomView?.findViewById<TextView>(R.id.wisdom_source)
+                wisdomView?.findViewById<TextView>(R.id.wisdom_text)?.text = text
+                wisdomView?.findViewById<TextView>(R.id.wisdom_source)?.text = source
 
-            wisdomText?.text = text
-            wisdomSource?.text = source
-
-            // Set up window parameters
-            val windowType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
-            }
-
-            var flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-            } else {
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-            }
-
-            val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                windowType,
-                flags,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.CENTER
-                flags = flags or WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    layoutInDisplayCutoutMode =
-                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                val windowType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                } else {
+                    @Suppress("DEPRECATION")
+                    WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
                 }
-            }
 
-            // Set up swipe to dismiss using the standalone class
-            val swipeListener = SwipeDismissTouchListener(
-                wisdomView!!,
-                object : SwipeDismissTouchListener.DismissCallbacks {
-                    override fun onDismiss(view: View, direction: Int) {
-                        // When swiped, hide the wisdom
-                        hideWisdom()
+                // Corrected: 'if' as an expression needs an 'else' branch
+                val resolvedFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                } else {
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or // Deprecated in P, but needed for older
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                }
+
+
+                val params = WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                    windowType, resolvedFlags, PixelFormat.TRANSLUCENT // Use resolvedFlags
+                ).apply {
+                    gravity = Gravity.CENTER
+                    // FLAG_ALT_FOCUSABLE_IM is removed as it's often problematic with overlays
+                    // and FLAG_NOT_FOCUSABLE should handle most keyboard interactions.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                     }
                 }
-            )
 
-            // Apply the swipe listener to the root view
-            wisdomView?.setOnTouchListener(swipeListener)
+                // Corrected: Explicitly define lambda parameters for DismissCallbacks
+                wisdomView?.setOnTouchListener(
+                    SwipeDismissTouchListener(
+                        wisdomView!!,
+                        object : SwipeDismissTouchListener.DismissCallbacks {
+                            override fun onDismiss(view: View, direction: Int) {
+                                hideWisdom()
+                            }
+                        }
+                    )
+                )
 
-            // Add a small TextView hint about swiping
-            try {
-                val swipeHint = TextView(this)
-                swipeHint.text = "← Swipe to dismiss →"
-                swipeHint.setTextColor(resources.getColor(R.color.nebula_purple, null))
-                swipeHint.textSize = 12f
-                swipeHint.alpha = 0.8f
-                swipeHint.gravity = Gravity.CENTER
+                Log.d(TAG, "Adding wisdom view to window")
+                windowManager.addView(wisdomView, params)
 
-                // Note: You may need to add this to your layout if it's not already included
-                // For now, we'll just use the main wisdom view
-            } catch (e: Exception) {
-                Log.e(TAG, "Error adding swipe hint: ${e.message}")
-            }
-
-            Log.d(TAG, "Adding wisdom view to window")
-            windowManager.addView(wisdomView, params)
-
-            // Add animation effect
-            val textView = wisdomText
-            animator = ValueAnimator.ofFloat(0.8f, 1.0f).apply {
-                duration = 2000
-                repeatCount = ValueAnimator.INFINITE
-                repeatMode = ValueAnimator.REVERSE
-                addUpdateListener { animator ->
-                    val value = animator.animatedValue as Float
-                    textView?.alpha = value
+                val textView = wisdomView?.findViewById<TextView>(R.id.wisdom_text)
+                animator = ValueAnimator.ofFloat(0.8f, 1.0f).apply {
+                    duration = 2000
+                    repeatCount = ValueAnimator.INFINITE
+                    repeatMode = ValueAnimator.REVERSE
+                    addUpdateListener { animation -> textView?.alpha = animation.animatedValue as Float }
+                    start()
                 }
-                start()
-            }
 
-            // Auto-hide after 20 seconds
-            serviceScope.launch {
-                delay(20000)
-                animator?.cancel()
-                hideWisdom()
+                serviceScope.launch {
+                    delay(20000)
+                    hideWisdom()
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to add wisdom view: ${e.message}", e)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to add wisdom view: ${e.message}", e)
-            e.printStackTrace()
         }
     }
 
     private fun hideWisdom() {
-        try {
-            // Cancel animation if any
+        mainHandler.post {
             animator?.cancel()
             animator = null
-
             wisdomView?.let { view ->
-                mainHandler.post {
-                    try {
+                try {
+                    if (view.isAttachedToWindow) {
                         windowManager.removeView(view)
                         Log.d(TAG, "Wisdom view removed")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error removing wisdom view: ${e.message}")
+                    } else {
+                        Log.d(TAG, "Wisdom view removed on else")  // temporary fix need to be review
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error removing wisdom view: ${e.message}")
                 }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error removing wisdom view: ${e.message}")
+            wisdomView = null
         }
-        wisdomView = null
     }
 
-    private fun isScreenOn(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+    private fun isScreenOnAndDeviceUnlocked(): Boolean {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val isScreenOn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
             powerManager.isInteractive
         } else {
             @Suppress("DEPRECATION")
-            (getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isScreenOn
+            powerManager.isScreenOn
         }
-    }
-
-    private fun isDeviceUnlocked(): Boolean {
         val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-        return !keyguardManager.isKeyguardLocked
+        // isDeviceLocked is more reliable than isKeyguardLocked for modern Android.
+        // isKeyguardSecure tells if a PIN/Pattern/Password is set.
+        // isDeviceLocked tells if the device is currently locked.
+        val isDeviceLocked = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            keyguardManager.isDeviceLocked
+        } else {
+            @Suppress("DEPRECATION")
+            keyguardManager.isKeyguardLocked // Fallback for older versions
+        }
+
+        return isScreenOn && !isDeviceLocked
     }
 
     inner class ScreenReceiver : BroadcastReceiver() {
@@ -378,31 +386,27 @@ class WisdomDisplayService : Service() {
 
             when (action) {
                 Intent.ACTION_SCREEN_ON -> {
-                    // When screen turns on, schedule a wisdom display
-                    serviceScope.launch {
-                        delay(1000) // Small delay to ensure screen is fully on
-                        showRandomWisdom()
+                    // Wait for USER_PRESENT to confirm unlock, or if screen just turns on but was not locked.
+                    if (isScreenOnAndDeviceUnlocked()) {
+                        serviceScope.launch {
+                            delay(500L) // Short delay
+                            showRandomWisdom()
+                        }
                     }
                 }
                 Intent.ACTION_USER_PRESENT -> {
-                    // When device is unlocked, schedule a wisdom display
-                    serviceScope.launch {
-                        delay(1500) // Slightly longer delay for unlock
-                        showRandomWisdom()
+                    if (isScreenOnAndDeviceUnlocked()) { // Double check, though USER_PRESENT implies it.
+                        serviceScope.launch {
+                            delay(1500L)
+                            showRandomWisdom()
+                        }
                     }
                 }
                 Intent.ACTION_SCREEN_OFF -> {
                     hideWisdom()
                 }
-                ACTION_STOP_SERVICE -> {
-                    stopSelf()
-                }
-                ACTION_DISPLAY_WISDOM -> {
-                    // This is handled in onStartCommand
-                }
+                ACTION_STOP_SERVICE -> stopSelf()
             }
         }
     }
-
-
 }

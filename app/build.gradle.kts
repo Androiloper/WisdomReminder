@@ -16,7 +16,8 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner =
+            "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -29,7 +30,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+
+            isMinifyEnabled = false // Change to true for release builds
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -40,6 +42,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+
     }
 
     kotlinOptions {
@@ -48,16 +51,19 @@ android {
 
     buildFeatures {
         compose = true
-        viewBinding = true
+        viewBinding = true // If you use ViewBinding; otherwise, can be false
         buildConfig = true
     }
 
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
+        kotlinCompilerExtensionVersion = "1.5.1" // EXPLICITLY SET VERSION
+        // This version is compatible with Kotlin 1.9.0
+        // and aligns with Compose 1.5.x (e.g., Compose UI 1.5.3, 1.5.4).
     }
 
     kotlin {
         sourceSets.all {
+
             languageSettings.optIn("kotlin.RequiresOptIn")
         }
     }
@@ -76,6 +82,7 @@ hilt {
 }
 dependencies {
     // Core Android dependencies
+
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
@@ -89,7 +96,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.runtime:runtime-livedata:1.5.4")
+    implementation("androidx.compose.runtime:runtime-livedata")
 
     // Lifecycle and ViewModel utilities
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
@@ -102,12 +109,13 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // Dependency Injection
+    // Dependency Injection (Hilt)
     implementation("com.google.dagger:hilt-android:2.48")
     ksp("com.google.dagger:hilt-android-compiler:2.48")
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
     implementation("androidx.hilt:hilt-work:1.1.0")
     ksp("androidx.hilt:hilt-compiler:1.1.0")
+
 
     // DataStore for preferences
     implementation("androidx.datastore:datastore-preferences:1.0.0")
@@ -129,6 +137,7 @@ dependencies {
     androidTestImplementation(platform("androidx.compose:compose-bom:2023.10.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
+
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("androidx.arch.core:core-testing:2.2.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
@@ -137,19 +146,5 @@ dependencies {
     implementation("com.jakewharton.timber:timber:5.0.1")
 
     implementation("androidx.core:core-splashscreen:1.0.1")
-
-    // Hilt dependencies
-    implementation("com.google.dagger:hilt-android:2.48")
-    ksp("com.google.dagger:hilt-android-compiler:2.48")
-    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
-    implementation("androidx.hilt:hilt-work:1.1.0")
-    ksp("androidx.hilt:hilt-compiler:1.1.0")
-
-    // Add the EntryPoints annotation if needed
-    implementation("com.google.dagger:hilt-android-gradle-plugin:2.48")
-
-
-
-
 
 }

@@ -18,7 +18,7 @@ import java.time.LocalDateTime
 )
 @TypeConverters(Converters::class)
 data class WisdomEntity(
-    @PrimaryKey val id: Long = System.currentTimeMillis(),
+    @PrimaryKey(autoGenerate = true) var id: Long = 0L, // Changed: Auto-generated ID
     val text: String,
     val source: String = "",
     val category: String = "General",
@@ -60,7 +60,9 @@ data class WisdomEntity(
 
     companion object {
         fun fromWisdom(wisdom: Wisdom): WisdomEntity = WisdomEntity(
-            id = wisdom.id,
+            // id = wisdom.id, // Room will handle ID generation if it's 0L (new entity)
+            // If wisdom.id is not 0, it means we are updating an existing entity.
+            id = if (wisdom.id == 0L && wisdom.text.isNotEmpty()) 0L else wisdom.id, // Ensure new items for insertion have id 0
             text = wisdom.text,
             source = wisdom.source,
             category = wisdom.category,

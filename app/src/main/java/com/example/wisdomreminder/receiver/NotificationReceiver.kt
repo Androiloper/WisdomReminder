@@ -7,14 +7,14 @@ import android.widget.Toast
 import com.example.wisdomreminder.data.repository.WisdomRepository
 import com.example.wisdomreminder.util.WisdomAlarmManager
 import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import timber.log.Timber
 
-// Remove the @AndroidEntryPoint annotation
 class NotificationReceiver : BroadcastReceiver() {
 
-    // Add an EntryPoint interface
     @dagger.hilt.EntryPoint
     @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
     interface NotificationReceiverEntryPoint {
@@ -22,8 +22,10 @@ class NotificationReceiver : BroadcastReceiver() {
         fun wisdomAlarmManager(): WisdomAlarmManager
     }
 
+    private val job = SupervisorJob()
+    private val scope = CoroutineScope(Dispatchers.IO + job)
+
     override fun onReceive(context: Context, intent: Intent) {
-        // Get dependencies using EntryPoint
         val entryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
             NotificationReceiverEntryPoint::class.java
@@ -37,29 +39,31 @@ class NotificationReceiver : BroadcastReceiver() {
 
         if (wisdomId == -1L) return
 
-        when (action) {
-            "com.example.wisdomreminder.MARK_READ" -> {
-                Timber.d("Marking wisdom $wisdomId as read")
-                GlobalScope.launch {
-                    wisdomRepository.recordExposure(wisdomId)
+        val pendingResult = goAsync()
+
+        scope.launch {
+            try {
+                when (action) {
+                    "com.example.wisdomreminder.MARK_READ" -> {
+                        Timber.d("Marking wisdom $wisdomId as read")
+                        wisdomRepository.recordExposure(wisdomId).onSuccess {
+                            launch(Dispatchers.Main) {
+                                Toast.makeText(context, "Wisdom marked as read", Toast.LENGTH_SHORT).show()
+                            }
+                        }.onFailure {
+                            Timber.e(it, "Failed to mark wisdom $wisdomId as read")
+                        }
+                    }
+                    "com.example.wisdomreminder.SNOOZE_ALARM" -> {
+                        Timber.d("Snoozing alarm for wisdom $wisdomId")
+                        wisdomAlarmManager.scheduleSnoozeAlarm(wisdomId)
+                        launch(Dispatchers.Main) {
+                            Toast.makeText(context, "Reminder snoozed for 15 minutes", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
-
-                Toast.makeText(
-                    context,
-                    "Wisdom marked as read",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-            "com.example.wisdomreminder.SNOOZE_ALARM" -> {
-                Timber.d("Snoozing alarm for wisdom $wisdomId")
-                wisdomAlarmManager.scheduleSnoozeAlarm(wisdomId)
-
-                // Show snooze confirmation toast
-                Toast.makeText(
-                    context,
-                    "Reminder snoozed for 15 minutes",
-                    Toast.LENGTH_SHORT
-                ).show()
+            } finally {
+                pendingResult.finish()
             }
         }
     }

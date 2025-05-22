@@ -41,9 +41,9 @@ import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.ui.components.*
 import com.example.wisdomreminder.ui.theme.*
 import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
-import com.example.wisdomreminder.ui.wisdom.QueuedWisdomItem
+// import com.example.wisdomreminder.ui.wisdom.QueuedWisdomItem // Not directly used if ActiveWisdomCard is preferred
 import java.time.format.DateTimeFormatter
-import com.example.wisdomreminder.ui.components.CategoryExplorerCard
+// import com.example.wisdomreminder.ui.components.CategoryExplorerCard // Imported via *
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,15 +58,9 @@ fun MainScreen(
     var showAddWisdomDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
-    // Add this state to store the selected category
-    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var selectedCategoryForExplorer by remember { mutableStateOf<String?>(null) }
 
 
-
-
-
-
-    // Collect events
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
@@ -76,173 +70,89 @@ fun MainScreen(
                 is MainViewModel.UiEvent.WisdomActivated -> {
                     Toast.makeText(context, "Wisdom activated", Toast.LENGTH_SHORT).show()
                 }
-                is MainViewModel.UiEvent.CategoryAdded -> {
-                    Toast.makeText(context, "Category added successfully", Toast.LENGTH_SHORT).show()
+                // Using the corrected event names from your latest MainViewModel
+                is MainViewModel.UiEvent.CategoryCardAdded -> {
+                    Toast.makeText(context, "Category card added to dashboard", Toast.LENGTH_SHORT).show()
                 }
-                is MainViewModel.UiEvent.CategoryRemoved -> {
-                    Toast.makeText(context, "Category removed", Toast.LENGTH_SHORT).show()
+                is MainViewModel.UiEvent.CategoryCardRemoved -> {
+                    Toast.makeText(context, "Category card removed from dashboard", Toast.LENGTH_SHORT).show()
                 }
                 is MainViewModel.UiEvent.Error -> {
-                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
                 }
-                else -> { /* Handle other events */ }
+                else -> { /* Handle WisdomDeleted and WisdomUpdated if needed, or other events */ }
             }
         }
     }
 
-    // Cosmic background
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(DeepSpace)
             .drawBehind {
-                // Create a gradient background with stars
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            CosmicBlack,
-                            DeepSpace
-                        )
-                    )
-                )
-
-                // Small cosmic particles
+                drawRect(brush = Brush.verticalGradient(colors = listOf(CosmicBlack, DeepSpace)))
                 for (i in 0..100) {
                     val x = (Math.random() * size.width).toFloat()
                     val y = (Math.random() * size.height).toFloat()
                     val radius = (Math.random() * 2f + 0.5f).toFloat()
-                    val alpha = (Math.random() * 0.8f + 0.2f).toFloat()
-
-                    drawCircle(
-                        color = StarWhite.copy(alpha = alpha),
-                        radius = radius,
-                        center = Offset(x, y)
-                    )
+                    val alphaVal = (Math.random() * 0.8f + 0.2f).toFloat()
+                    drawCircle(color = StarWhite.copy(alpha = alphaVal), radius = radius, center = Offset(x, y))
                 }
             }
     ) {
-        // Nebula effect in the background
         Image(
             painter = painterResource(id = R.drawable.ic_wisdom),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .alpha(0.1f)
-                .blur(60.dp)
+            modifier = Modifier.fillMaxSize().alpha(0.1f).blur(60.dp)
         )
+        CosmicAnimations.CosmicParticlesEffect(particleCount = 30, modifier = Modifier.fillMaxSize())
 
-        // Add cosmic particles animation
-        CosmicAnimations.CosmicParticlesEffect(
-            particleCount = 30,
-            modifier = Modifier.fillMaxSize()
-        )
-
-        // Render UI based on state
         when (val state = uiState) {
             MainViewModel.WisdomUiState.Loading -> {
-                // Show loading indicator
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = ElectricGreen)
                 }
             }
-
             is MainViewModel.WisdomUiState.Error -> {
-                // Show error state
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Text(
-                            "Error: ${state.message}",
-                            color = NeonPink,
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                        Text("Error: ${state.message}", color = NeonPink, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge)
                         Spacer(modifier = Modifier.height(16.dp))
-
-                        Button(
-                            onClick = { viewModel.refreshData() },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = NebulaPurple
-                            )
-                        ) {
+                        Button(onClick = { viewModel.refreshData() }, colors = ButtonDefaults.buttonColors(containerColor = NebulaPurple)) {
                             Text("RETRY")
                         }
                     }
                 }
             }
-
-            is MainViewModel.WisdomUiState.Success -> {
-                // Main content when data loaded successfully
+            is MainViewModel.UiState.Success -> {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     containerColor = Color.Transparent,
                     contentColor = StarWhite,
                     topBar = {
                         TopAppBar(
-                            title = {
-                                Text(
-                                    "WISDOM REMINDER",
-                                    style = MaterialTheme.typography.headlineLarge.copy(
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                            },
-                            colors = TopAppBarDefaults.topAppBarColors(
-                                containerColor = GlassSurface.copy(alpha = 0.5f),
-                                titleContentColor = StarWhite
-                            ),
+                            title = { Text("WISDOM REMINDER", style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold)) },
+                            colors = TopAppBarDefaults.topAppBarColors(containerColor = GlassSurface.copy(alpha = 0.5f), titleContentColor = StarWhite),
                             actions = {
-                                // Add START/STOP button for the service
                                 Button(
                                     onClick = {
-                                        if (state.serviceRunning) {
-                                            viewModel.stopWisdomService(context)
-                                        } else {
-                                            viewModel.checkAndRestartService(context)
-                                        }
+                                        if (state.serviceRunning) viewModel.stopWisdomService(context)
+                                        else viewModel.startWisdomService(context) // Changed from checkAndRestart
                                     },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (state.serviceRunning)
-                                            NeonPink.copy(alpha = 0.8f)
-                                        else
-                                            ElectricGreen.copy(alpha = 0.8f)
-                                    ),
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (state.serviceRunning) NeonPink.copy(alpha = 0.8f) else ElectricGreen.copy(alpha = 0.8f)),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                     modifier = Modifier.padding(end = 8.dp)
-                                ) {
-                                    Text(if (state.serviceRunning) "STOP" else "START")
-                                }
-
+                                ) { Text(if (state.serviceRunning) "STOP SVC" else "START SVC") }
                                 IconButton(onClick = { onSettingsClick() }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Settings,
-                                        contentDescription = "Settings",
-                                        tint = StarWhite
-                                    )
+                                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = StarWhite)
                                 }
                             }
                         )
                     },
                     floatingActionButton = {
-                        FloatingActionButton(
-                            onClick = { showAddWisdomDialog = true },
-                            containerColor = NebulaPurple,
-                            contentColor = StarWhite
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Add Wisdom"
-                            )
+                        FloatingActionButton(onClick = { showAddWisdomDialog = true }, containerColor = NebulaPurple, contentColor = StarWhite) {
+                            Icon(Icons.Default.Add, contentDescription = "Add Wisdom")
                         }
                     }
                 ) { paddingValues ->
@@ -255,319 +165,126 @@ fun MainScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Spacer(modifier = Modifier.height(8.dp))
-
-                        // Stats Cards Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            StatCard(
-                                title = "ACTIVE",
-                                value = state.activeCount.toString(),
-                                icon = Icons.Default.PlayArrow,
-                                color = ElectricGreen,
-                                modifier = Modifier.weight(1f)
-                            )
-                            StatCard(
-                                title = "COMPLETED",
-                                value = state.completedCount.toString(),
-                                icon = Icons.Default.PlayArrow,
-                                color = CyberBlue,
-                                modifier = Modifier.weight(1f)
-                            )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            StatCard("ACTIVE", state.activeCount.toString(), Icons.Default.PlayArrow, ElectricGreen, Modifier.weight(1f))
+                            StatCard("COMPLETED", state.completedCount.toString(), Icons.Default.PlayArrow, CyberBlue, Modifier.weight(1f))
                         }
 
-                        // Swipeable Wisdom Cards
-                        // Combine all wisdom for swiping through
-                        val allWisdom = state.activeWisdom + state.queuedWisdom + state.completedWisdom
+                        val allWisdomItems = remember(state.activeWisdom, state.queuedWisdom, state.completedWisdom) {
+                            state.activeWisdom + state.queuedWisdom + state.completedWisdom
+                        }
 
-                        // Get all available categories
-                        val allCategories = state.allCategories
+                        SwipeableWisdomCards(
+                            allWisdom = allWisdomItems,
+                            onWisdomClick = { wisdomId -> onWisdomClick(wisdomId) }
+                        )
 
                         Text(
                             text = "WISDOM EXPLORER",
                             style = MaterialTheme.typography.titleLarge,
                             color = NeonPink,
-                            modifier = Modifier.padding(top = 8.dp)
+                            modifier = Modifier.padding(top = 16.dp, bottom = 0.dp)
                         )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-
-
-                        // Display the wisdom explorer cards with circular background
                         CategoryExplorerCard(
-                            allWisdom = allWisdom,
-                            selectedCategory = selectedCategory,
-                            allCategories = allCategories,
-                            onWisdomClick = { id -> onWisdomClick(id) },
-                            onCategorySelected = { category -> selectedCategory = category }
+                            allWisdom = allWisdomItems,
+                            selectedCategory = selectedCategoryForExplorer,
+                            allCategories = state.allCategories,
+                            onWisdomClick = { wisdomId -> onWisdomClick(wisdomId) },
+                            onCategorySelected = { category -> selectedCategoryForExplorer = category }
                         )
 
-
-
-
-
-
-
-                        // Fixed SwipeableWisdomCards with explicit type
-                        SwipeableWisdomCards(
-                            allWisdom = allWisdom,
-                            onWisdomClick = { id: Long -> onWisdomClick(id) }
+                        Text(
+                            text = "MY DASHBOARD",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = ElectricGreen,
+                            modifier = Modifier.padding(top = 16.dp)
                         )
-
-
-
-
-                        /*
-                        // Current category cards
-                        if (state.selectedCategories.isEmpty()) {
-                            // Empty state
-                            GlassCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(100.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "Add category cards to view wisdom by category",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = StarWhite,
-                                        textAlign = TextAlign.Center
-                                    )
+                        if (state.selectedCategoriesForCards.isEmpty()) {
+                            GlassCard(modifier = Modifier.fillMaxWidth().height(100.dp)) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text("Add category cards to your dashboard via the button below.", style = MaterialTheme.typography.bodyMedium, color = StarWhite, textAlign = TextAlign.Center, modifier = Modifier.padding(8.dp))
                                 }
                             }
                         } else {
-                            // Display category cards - improved implementation
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Log.d("MainScreen", "Rendering ${state.selectedCategories.size} categories")
-                                Log.d("MainScreen", "Category map has ${state.categoryWisdom.size} categories")
-
-                                state.selectedCategories.forEach { category ->
-                                    Log.d("MainScreen", "Rendering category: $category")
-                                    val wisdomList = state.categoryWisdom[category] ?: emptyList()
-                                    Log.d("MainScreen", "Category $category has ${wisdomList.size} items")
-
-                                    // Fixed CategoryWisdomCard call with explicit types
-                                    // Display the wisdom explorer cards with circular background
-                                    CategoryExplorerCard(
-                                        allWisdom = allWisdom,
-                                        selectedCategory = selectedCategory,
-                                        allCategories = allCategories,
-                                        onWisdomClick = { id -> onWisdomClick(id) },
-                                        onCategorySelected = { category -> selectedCategory = category }
+                            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                state.selectedCategoriesForCards.forEach { category ->
+                                    val wisdomListForCategory = state.categoryWisdomMap[category] ?: emptyList()
+                                    CategoryWisdomCard(
+                                        category = category,
+                                        wisdomList = wisdomListForCategory,
+                                        onWisdomClick = { wisdomId -> onWisdomClick(wisdomId) },
+                                        onRemove = { viewModel.removeCategoryCard(category) }
                                     )
                                 }
                             }
                         }
 
-
-                         */
-
-
-
-                        /*
-                        // Add Category Button
                         var showCategorySelectionDialog by remember { mutableStateOf(false) }
-
                         Button(
-                            onClick = {
-                                Log.d("MainScreen", "Opening category selection dialog")
-                                showCategorySelectionDialog = true
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = CyberBlue.copy(alpha = 0.8f)
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp)
+                            onClick = { showCategorySelectionDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberBlue.copy(alpha = 0.8f)),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Add Category",
-                                modifier = Modifier.size(20.dp)
-                            )
+                            Icon(Icons.Default.Add, contentDescription = "Add Category Card", modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("ADD CATEGORY CARD")
+                            Text("ADD CATEGORY TO DASHBOARD")
                         }
 
-                         */
-
-                        /*
-// Category Selection Dialog
                         if (showCategorySelectionDialog) {
                             CategorySelectionDialog(
                                 availableCategories = state.allCategories,
-                                selectedCategories = state.selectedCategories,
+                                selectedCategories = state.selectedCategoriesForCards,
                                 onDismiss = { showCategorySelectionDialog = false },
                                 onCategorySelected = { category ->
-                                    Log.d("MainScreen", "Selected category: $category")
-                                    viewModel.addCategory(category)
+                                    viewModel.addCategoryCard(category)
+                                    showCategorySelectionDialog = false // Dismiss after selection
                                 }
                             )
                         }
 
-                         */
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Main Section - Featured Active Wisdom
-                        Text(
-                            text = "ACTIVE WISDOM",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = ElectricGreen,
-                            modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
-                        )
-
-                        if (state.activeWisdom.isEmpty()) {
-                            // Empty state for active wisdom
-                            GlassCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(200.dp)
-                                    .clickable { onWisdomListClick() }
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Text(
-                                            text = stringResource(R.string.empty_active),
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            color = StarWhite,
-                                            textAlign = TextAlign.Center
-                                        )
-
-                                        Button(
-                                            onClick = { onWisdomListClick() },
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = NebulaPurple
-                                            ),
-                                            modifier = Modifier.padding(top = 16.dp)
-                                        ) {
-                                            Text("VIEW WISDOM")
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            // Display featured wisdom
-                            ActiveWisdomCard(
+                        if (state.activeWisdom.isNotEmpty()) {
+                            Text(
+                                text = "FEATURED ACTIVE WISDOM",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = ElectricGreen,
+                                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                            )
+                            // Using the WisdomComponents.ActiveWisdomCard
+                            com.example.wisdomreminder.ui.components.ActiveWisdomCard(
                                 wisdom = state.activeWisdom.first(),
                                 onClick = { wisdom -> onWisdomClick(wisdom.id) },
                                 modifier = Modifier.fillMaxWidth()
                             )
-                        }
-
-                        // Queued Wisdom Section
-                        Text(
-                            text = "QUEUED WISDOM",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = NebulaPurple,
-                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                        )
-
-                        if (state.queuedWisdom.isEmpty()) {
-                            // Empty state for queued wisdom
+                        } else if (allWisdomItems.isEmpty()){
                             GlassCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(100.dp)
+                                modifier = Modifier.fillMaxWidth().height(150.dp).clickable { showAddWisdomDialog = true },
                             ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.empty_queued),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = StarWhite,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-                        } else {
-                            // Display first few queued wisdom
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                state.queuedWisdom.take(3).forEach { wisdom ->
-                                    QueuedWisdomItem(
-                                        wisdom = wisdom,
-                                        onClick = { onWisdomClick(wisdom.id) },
-                                        onActivate = { viewModel.activateWisdom(wisdom.id) }
-                                    )
-                                }
-
-                                if (state.queuedWisdom.size > 3) {
-                                    OutlinedButton(
-                                        onClick = { onWisdomListClick() },
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = NebulaPurple
-                                        ),
-                                        modifier = Modifier
-                                            .align(Alignment.CenterHorizontally)
-                                            .padding(top = 8.dp)
-                                    ) {
-                                        Text("VIEW ALL (${state.queuedWisdom.size})")
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("No wisdom yet. Add your first one!", style = MaterialTheme.typography.bodyLarge, color = StarWhite, textAlign = TextAlign.Center)
                                     }
                                 }
                             }
                         }
 
-
-
-
-
-
-                        // ALL WISDOM Section
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text(
-                            text = "ALL WISDOM",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = CyberBlue,
-                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                        )
-
-                        // Combine all wisdom for the ALL WISDOM section
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        AllWisdomSection(
-                            allWisdom = state.activeWisdom + state.queuedWisdom + state.completedWisdom,
-                            onWisdomClick = { wisdomId -> onWisdomClick(wisdomId) }
-                        )
-
-                        // Debug buttons (for development only)
-                        if (state.queuedWisdom.isEmpty() && state.activeWisdom.isEmpty()) {
-                            Button(
-                                onClick = { viewModel.addSampleWisdom() },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = NeonPink
-                                ),
-                                modifier = Modifier
-                                    .align(Alignment.CenterHorizontally)
-                                    .padding(top = 16.dp)
-                            ) {
-                                Text("ADD SAMPLE WISDOM")
-                            }
+                        if (allWisdomItems.isNotEmpty()) {
+                            AllWisdomSection(
+                                allWisdom = allWisdomItems,
+                                onWisdomClick = { wisdomId -> onWisdomClick(wisdomId) }
+                            )
                         }
 
-                        Spacer(modifier = Modifier.height(80.dp)) // Bottom spacing for FAB
+                        if (allWisdomItems.isEmpty() && state.activeWisdom.isEmpty()) {
+                            Button(
+                                onClick = { viewModel.addSampleWisdom() },
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonPink),
+                                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 16.dp)
+                            ) { Text("ADD SAMPLE WISDOM") }
+                        }
+                        Spacer(modifier = Modifier.height(80.dp))
                     }
                 }
 
-                // Add Wisdom Dialog
                 if (showAddWisdomDialog) {
                     AddWisdomDialog(
                         onDismiss = { showAddWisdomDialog = false },
