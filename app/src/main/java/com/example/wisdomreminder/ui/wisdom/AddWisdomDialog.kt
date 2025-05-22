@@ -1,86 +1,64 @@
 package com.example.wisdomreminder.ui.wisdom
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.example.wisdomreminder.ui.theme.CyberBlue
-import com.example.wisdomreminder.ui.theme.ElectricGreen
-import com.example.wisdomreminder.ui.theme.GlassSurface
-import com.example.wisdomreminder.ui.theme.NebulaPurple
-import com.example.wisdomreminder.ui.theme.NeonPink
-import com.example.wisdomreminder.ui.theme.StarWhite
+import com.example.wisdomreminder.ui.main.MainViewModel // For DEFAULT_CATEGORY
+import com.example.wisdomreminder.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddWisdomDialog(
+    allExistingCategories: List<String>, // Pass this from MainViewModel's state.allCategories
     onDismiss: () -> Unit,
     onSave: (String, String, String) -> Unit
 ) {
     var wisdomText by remember { mutableStateOf("") }
     var wisdomSource by remember { mutableStateOf("") }
-    var wisdomCategory by remember { mutableStateOf("General") }
-
-    // Available categories
-    val categories = listOf("General", "Personal", "Professional", "Health", "Relationships", "Philosophy", "Motivation")
+    var wisdomCategoryInput by remember { mutableStateOf(MainViewModel.DEFAULT_CATEGORY) } // Editable input
     var showCategoryDropdown by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+
+    // Combine predefined defaults with existing unique categories, ensuring "General" is present
+    val defaultSuggestions = listOf("Personal", "Professional", "Health", "Relationships", "Philosophy", "Motivation", "Quotes")
+    val uniqueCategories = (allExistingCategories + defaultSuggestions + listOf(MainViewModel.DEFAULT_CATEGORY)).distinct().sorted()
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            colors = CardDefaults.cardColors(
-                containerColor = GlassSurface,
-                contentColor = StarWhite
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            colors = CardDefaults.cardColors(containerColor = GlassSurface, contentColor = StarWhite),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
             shape = MaterialTheme.shapes.large
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "ADD NEW WISDOM",
+                    "ADD NEW WISDOM",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = ElectricGreen
                 )
 
-                // Wisdom text field
                 OutlinedTextField(
                     value = wisdomText,
                     onValueChange = { wisdomText = it },
@@ -90,16 +68,17 @@ fun AddWisdomDialog(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = ElectricGreen,
                         unfocusedBorderColor = StarWhite.copy(alpha = 0.5f),
-                        focusedTextColor = StarWhite,
-                        unfocusedTextColor = StarWhite,
                         cursorColor = ElectricGreen,
                         focusedLabelColor = ElectricGreen,
-                        unfocusedLabelColor = StarWhite.copy(alpha = 0.7f)
+                        unfocusedLabelColor = StarWhite.copy(alpha = 0.7f),
+                        focusedContainerColor = GlassSurfaceDark.copy(alpha = 0.5f),
+                        unfocusedContainerColor = GlassSurfaceDark.copy(alpha = 0.5f),
+                        focusedTextColor = StarWhite,
+                        unfocusedTextColor = StarWhite
                     ),
                     minLines = 3
                 )
 
-                // Source field
                 OutlinedTextField(
                     value = wisdomSource,
                     onValueChange = { wisdomSource = it },
@@ -109,96 +88,86 @@ fun AddWisdomDialog(
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = CyberBlue,
                         unfocusedBorderColor = StarWhite.copy(alpha = 0.5f),
-                        focusedTextColor = StarWhite,
-                        unfocusedTextColor = StarWhite,
                         cursorColor = CyberBlue,
                         focusedLabelColor = CyberBlue,
-                        unfocusedLabelColor = StarWhite.copy(alpha = 0.7f)
+                        unfocusedLabelColor = StarWhite.copy(alpha = 0.7f),
+                        focusedContainerColor = GlassSurfaceDark.copy(alpha = 0.5f),
+                        unfocusedContainerColor = GlassSurfaceDark.copy(alpha = 0.5f),
+                        focusedTextColor = StarWhite,
+                        unfocusedTextColor = StarWhite
                     ),
                     singleLine = true
                 )
 
-                // Category field with dropdown
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                // Editable Category Field with Dropdown
+                Box {
                     OutlinedTextField(
-                        value = wisdomCategory,
-                        onValueChange = { wisdomCategory = it },
+                        value = wisdomCategoryInput,
+                        onValueChange = {
+                            wisdomCategoryInput = it
+                            showCategoryDropdown = true // Show dropdown when user types
+                        },
                         label = { Text("Category") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focusState -> // Show dropdown on focus too
+                                if (focusState.isFocused) {
+                                    showCategoryDropdown = true
+                                }
+                            },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = NeonPink,
                             unfocusedBorderColor = StarWhite.copy(alpha = 0.5f),
-                            focusedTextColor = StarWhite,
-                            unfocusedTextColor = StarWhite,
                             cursorColor = NeonPink,
                             focusedLabelColor = NeonPink,
-                            unfocusedLabelColor = StarWhite.copy(alpha = 0.7f)
+                            unfocusedLabelColor = StarWhite.copy(alpha = 0.7f),
+                            focusedContainerColor = GlassSurfaceDark.copy(alpha = 0.5f),
+                            unfocusedContainerColor = GlassSurfaceDark.copy(alpha = 0.5f),
+                            focusedTextColor = StarWhite,
+                            unfocusedTextColor = StarWhite
                         ),
                         singleLine = true,
-                        readOnly = true,
                         trailingIcon = {
-                            TextButton(onClick = { showCategoryDropdown = !showCategoryDropdown }) {
-                                Text(
-                                    text = if (showCategoryDropdown) "Close" else "Select",
-                                    color = NeonPink
+                            IconButton(onClick = { showCategoryDropdown = !showCategoryDropdown }) {
+                                Icon(
+                                    imageVector = if (showCategoryDropdown) Icons.Filled.KeyboardArrowUp else Icons.Filled.ArrowDropDown,
+                                    contentDescription = "Toggle Category Dropdown",
+                                    tint = NeonPink
                                 )
                             }
                         }
                     )
 
-                    // Category dropdown
                     if (showCategoryDropdown) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(GlassSurface.copy(alpha = 0.8f))
-                        ) {
-                            Column(
+                        val filteredCategories = uniqueCategories.filter {
+                            it.contains(wisdomCategoryInput, ignoreCase = true) || wisdomCategoryInput.isBlank()
+                        }.take(10) // Limit suggestions for performance
+
+                        if (filteredCategories.isNotEmpty()) {
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(8.dp)
+                                    .padding(top = 60.dp) // Position below the TextField
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(GlassSurfaceDark.copy(alpha = 0.95f))
+                                    .border(1.dp, NeonPink.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                             ) {
-                                categories.forEach { category ->
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(
-                                                if (category == wisdomCategory)
-                                                    NeonPink.copy(alpha = 0.2f)
-                                                else
-                                                    Color.Transparent
-                                            )
-                                            .padding(12.dp)
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(
-                                                if (category == wisdomCategory)
-                                                    NeonPink.copy(alpha = 0.2f)
-                                                else
-                                                    Color.Transparent
-                                            ),
-                                        contentAlignment = Alignment.CenterStart
-                                    ) {
-                                        TextButton(
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 200.dp) // Constrain height
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    items(filteredCategories) { category ->
+                                        CategoryDropdownItem(
+                                            text = category,
+                                            isSelected = category.equals(wisdomCategoryInput, ignoreCase = true),
                                             onClick = {
-                                                wisdomCategory = category
+                                                wisdomCategoryInput = category
                                                 showCategoryDropdown = false
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Text(
-                                                text = category,
-                                                color = if (category == wisdomCategory)
-                                                    NeonPink
-                                                else
-                                                    StarWhite,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        }
+                                                focusManager.clearFocus() // Clear focus to hide keyboard
+                                            }
+                                        )
                                     }
                                 }
                             }
@@ -206,40 +175,50 @@ fun AddWisdomDialog(
                     }
                 }
 
-                // Action buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Gray.copy(alpha = 0.5f)
-                        ),
-                        modifier = Modifier.padding(end = 16.dp)
-                    ) {
-                        Text("CANCEL")
+                    TextButton(onClick = onDismiss) {
+                        Text("CANCEL", color = StarWhite.copy(alpha = 0.7f))
                     }
-
+                    Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
                             if (wisdomText.isNotBlank()) {
                                 onSave(
                                     wisdomText.trim(),
                                     wisdomSource.trim(),
-                                    wisdomCategory.trim()
+                                    wisdomCategoryInput.trim().ifEmpty { MainViewModel.DEFAULT_CATEGORY }
                                 )
                             }
                         },
                         enabled = wisdomText.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = NebulaPurple
-                        )
+                        colors = ButtonDefaults.buttonColors(containerColor = NebulaPurple)
                     ) {
                         Text("SAVE")
                     }
                 }
             }
         }
+    }
+}
+
+// Ensure CategoryDropdownItem is accessible (e.g., public or in the same file)
+@Composable
+fun CategoryDropdownItem(text: String, isSelected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .background(if (isSelected) NeonPink.copy(alpha = 0.2f) else Color.Transparent)
+            .padding(horizontal = 16.dp, vertical = 10.dp) // Adjusted padding
+    ) {
+        Text(
+            text = text,
+            color = if (isSelected) NeonPink else StarWhite,
+            style = MaterialTheme.typography.bodyLarge
+        )
     }
 }

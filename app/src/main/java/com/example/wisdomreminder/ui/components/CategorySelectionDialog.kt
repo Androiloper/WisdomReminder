@@ -2,15 +2,18 @@ package com.example.wisdomreminder.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border // New import
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn // New import
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -33,15 +36,14 @@ import com.example.wisdomreminder.ui.theme.GlassSurface
 import com.example.wisdomreminder.ui.theme.NebulaPurple
 import com.example.wisdomreminder.ui.theme.NeonPink
 import com.example.wisdomreminder.ui.theme.StarWhite
+import com.example.wisdomreminder.ui.wisdom.CategoryDropdownItem // Import if you made it public, or redefine here
 
-/**
- * Dialog for selecting a category to display as a card
- */
+
 @Composable
 fun CategorySelectionDialog(
-    availableCategories: List<String>, // Categories that can be added (not already on dashboard)
-    allCategoriesInSystem: List<String>, // All unique categories from the database
-    selectedCategoriesOnDashboard: List<String>, // Categories currently on the dashboard
+    availableCategories: List<String>,
+    allCategoriesInSystem: List<String>,
+    selectedCategoriesOnDashboard: List<String>,
     onDismiss: () -> Unit,
     onCategorySelected: (String) -> Unit
 ) {
@@ -55,62 +57,64 @@ fun CategorySelectionDialog(
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(16.dp), // Dialog padding
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
             shape = MaterialTheme.shapes.large
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp)
+                    .padding(24.dp) // Internal padding for card content
             ) {
                 Text(
-                    text = "SELECT CATEGORY",
+                    text = "ADD CATEGORY TO DASHBOARD", // Title
                     style = MaterialTheme.typography.headlineSmall,
                     color = NeonPink
                 )
-
                 Spacer(modifier = Modifier.height(16.dp))
-
                 Text(
-                    text = "Choose a category to add to your dashboard:",
+                    text = "Choose a category to add:",
                     style = MaterialTheme.typography.bodyMedium,
                     color = StarWhite.copy(alpha = 0.8f)
                 )
-
                 Spacer(modifier = Modifier.height(16.dp))
 
-                LazyColumn(
+                Box( // Box to constrain LazyColumn height
                     modifier = Modifier
-                        .weight(1f, fill = false)
                         .fillMaxWidth()
+                        .weight(1f, fill = false) // Allow it to take space but not push buttons
+                        .heightIn(max = 250.dp) // Max height for the list area
+                        .border(1.dp, NebulaPurple.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                 ) {
-                    if (availableCategories.isEmpty()) {
-                        item {
-                            Text(
-                                text = if (allCategoriesInSystem.isEmpty()) {
-                                    "No categories defined in the app. Add wisdom with categories first."
-                                } else {
-                                    "All available categories are already on your dashboard."
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = StarWhite.copy(alpha = 0.6f),
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
-                    } else {
-                        items(availableCategories) { category ->
-                            CategoryItem(
-                                category = category,
-                                isSelected = category == categoryToAdd,
-                                onSelect = { categoryToAdd = category }
-                            )
+                    LazyColumn(
+                        modifier = Modifier.padding(8.dp) // Padding inside the bordered box
+                    ) {
+                        if (availableCategories.isEmpty()) {
+                            item {
+                                Text(
+                                    text = if (allCategoriesInSystem.isEmpty()) {
+                                        "No categories defined yet. Add wisdom with categories first."
+                                    } else {
+                                        "All available categories are already on your dashboard."
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = StarWhite.copy(alpha = 0.7f),
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
+                        } else {
+                            items(availableCategories) { category ->
+                                // Using the same CategoryDropdownItem for consistent UI
+                                CategoryDropdownItem(
+                                    text = category,
+                                    isSelected = category == categoryToAdd,
+                                    onClick = { categoryToAdd = category }
+                                )
+                            }
                         }
                     }
                 }
-
                 Spacer(modifier = Modifier.height(24.dp))
-
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End
@@ -120,51 +124,18 @@ fun CategorySelectionDialog(
                         colors = ButtonDefaults.textButtonColors(
                             contentColor = StarWhite.copy(alpha = 0.7f)
                         )
-                    ) {
-                        Text("CANCEL")
-                    }
-
+                    ) { Text("CANCEL") }
                     Button(
                         onClick = {
                             categoryToAdd?.let { onCategorySelected(it) }
                             onDismiss()
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = NebulaPurple
-                        ),
+                        colors = ButtonDefaults.buttonColors(containerColor = NebulaPurple),
                         enabled = categoryToAdd != null,
                         modifier = Modifier.padding(start = 16.dp)
-                    ) {
-                        Text("ADD")
-                    }
+                    ) { Text("ADD") }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun CategoryItem( // This can remain private if only used here
-    category: String,
-    isSelected: Boolean,
-    onSelect: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(MaterialTheme.shapes.small)
-            .background(
-                if (isSelected) NeonPink.copy(alpha = 0.2f)
-                else NebulaPurple.copy(alpha = 0.1f)
-            )
-            .clickable(onClick = onSelect)
-            .padding(16.dp)
-    ) {
-        Text(
-            text = category,
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (isSelected) NeonPink else CyberBlue
-        )
     }
 }

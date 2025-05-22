@@ -1,14 +1,9 @@
-// Create in the same package as WisdomRepository
-
 package com.example.wisdomreminder.data.repository
 
 import com.example.wisdomreminder.model.Wisdom
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDateTime
 
-/**
- * Interface for the Wisdom Repository following dependency inversion principle
- */
 interface IWisdomRepository {
     // Basic CRUD operations
     fun getAllWisdom(): Flow<List<Wisdom>>
@@ -36,4 +31,9 @@ interface IWisdomRepository {
     suspend fun getTotalWisdomCount(): Result<Int>
     fun getActiveWisdomCount(): Flow<Int>
     fun getCompletedWisdomCount(): Flow<Int>
+
+    // --- New methods for category management ---
+    suspend fun renameCategory(oldName: String, newName: String): Result<Int>
+    suspend fun getWisdomCountForCategory(categoryName: String): Result<Int>
+    suspend fun clearCategoryItemsToGeneral(categoryToClear: String, generalCategoryName: String = "General"): Result<Int>
 }

@@ -43,13 +43,10 @@ class WisdomRepository @Inject constructor(
             val entity = WisdomEntity.fromWisdom(wisdom)
             val id = wisdomDao.insertWisdom(entity)
             Log.d(TAG, "Successfully added wisdom with ID: $id")
-
-            // Verify in debug mode only
             if (BuildConfig.DEBUG) {
                 val addedItem = wisdomDao.getWisdomById(id)
                 Log.d(TAG, "Verification - Added wisdom: ${addedItem?.text}, isActive=${addedItem?.isActive}")
             }
-
             Result.success(id)
         } catch (e: Exception) {
             Log.e(TAG, "Error adding wisdom", e)
@@ -79,7 +76,6 @@ class WisdomRepository @Inject constructor(
         }
     }
 
-    // 21/21 Rule specific operations
     override fun getActiveWisdom(): Flow<List<Wisdom>> =
         wisdomDao.getActiveWisdom()
             .mapToWisdomListAndCatch("Error getting active wisdom", TAG)
@@ -134,39 +130,29 @@ class WisdomRepository @Inject constructor(
     @Transaction
     override suspend fun activateWisdom(wisdomId: Long): Result<Boolean> {
         return try {
-            // Perform the activation and get the affected rows count
             val rowsUpdated = wisdomDao.activateWisdom(wisdomId, LocalDateTime.now())
-
-            // Check if any rows were updated
             if (rowsUpdated <= 0) {
-                Log.w(TAG, "SQL update affected 0 rows. Using direct entity update.")
-
-                // Get the wisdom entity directly
+                Log.w(TAG, "SQL update affected 0 rows for activateWisdom. Using direct entity update for ID: $wisdomId")
                 val wisdom = wisdomDao.getWisdomById(wisdomId)
                 if (wisdom != null) {
-                    // Create updated entity with isActive=true
                     val updatedWisdom = wisdom.copy(
                         isActive = true,
                         startDate = LocalDateTime.now(),
                         currentDay = 1,
                         exposuresToday = 0,
-                        exposuresTotal = 0,
+                        exposuresTotal = 0, // Reset total exposures on re-activation as well
                         dateCompleted = null
                     )
-                    // Update the entity directly
                     wisdomDao.updateWisdom(updatedWisdom)
                     Log.d(TAG, "Used direct entity update to activate wisdom: $wisdomId")
                 } else {
-                    return Result.failure(Exception("Wisdom with ID $wisdomId not found"))
+                    return Result.failure(Exception("Wisdom with ID $wisdomId not found for activation"))
                 }
             }
-
-            // Verify the activation worked
             val verifiedWisdom = wisdomDao.getWisdomById(wisdomId)
             if (verifiedWisdom?.isActive != true) {
-                return Result.failure(Exception("Failed to activate wisdom $wisdomId"))
+                return Result.failure(Exception("Failed to verify activation for wisdom $wisdomId"))
             }
-
             Log.d(TAG, "Successfully activated wisdom: $wisdomId")
             Result.success(true)
         } catch (e: Exception) {
@@ -186,7 +172,6 @@ class WisdomRepository @Inject constructor(
         }
     }
 
-    // Search and categorization
     override fun searchWisdom(query: String): Flow<List<Wisdom>> =
         wisdomDao.searchWisdom(query)
             .mapToWisdomListAndCatch("Error searching wisdom with query: $query", TAG)
@@ -197,12 +182,12 @@ class WisdomRepository @Inject constructor(
 
     override fun getAllCategories(): Flow<List<String>> =
         wisdomDao.getAllCategories()
+            .map { categories -> categories.filter { it.isNotBlank() } } // Filter out blank categories
             .catch { e ->
                 Log.e(TAG, "Error getting all categories", e)
                 emit(emptyList())
             }
 
-    // Statistics
     override suspend fun getTotalWisdomCount(): Result<Int> {
         return try {
             Result.success(wisdomDao.countWisdom())
@@ -219,4 +204,48 @@ class WisdomRepository @Inject constructor(
     override fun getCompletedWisdomCount(): Flow<Int> =
         wisdomDao.getCompletedCount()
             .mapToCountAndCatch("Error getting completed wisdom count", TAG)
+
+    // --- Implementations for new category management methods ---
+    @Transaction
+    override suspend fun renameCategory(oldName: String, newName: String): Result<Int> {
+        return try {
+            if (oldName.equals(newName, ignoreCase = true)) {
+                Log.d(TAG, "RenameCategory: Old and new names are the same ('$oldName'). No action needed.")
+                return Result.success(0) // No rows updated
+            }
+            // Optional: Check if newName already exists and handle (e.g., merge or prevent)
+            // For now, we'll just update.
+            val rowsAffected = wisdomDao.updateCategoryName(oldName, newName)
+            Log.d(TAG, "Renamed category from '$oldName' to '$newName'. $rowsAffected items updated.")
+            Result.success(rowsAffected)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error renaming category from '$oldName' to '$newName'", e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getWisdomCountForCategory(categoryName: String): Result<Int> {
+        return try {
+            Result.success(wisdomDao.getWisdomCountForCategory(categoryName))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting wisdom count for category: $categoryName", e)
+            Result.failure(e)
+        }
+    }
+
+    @Transaction
+    override suspend fun clearCategoryItemsToGeneral(categoryToClear: String, generalCategoryName: String): Result<Int> {
+        return try {
+            if (categoryToClear.equals(generalCategoryName, ignoreCase = true)) {
+                Log.d(TAG, "ClearCategoryItems: Category to clear ('$categoryToClear') is already the general category. No action needed.")
+                return Result.success(0)
+            }
+            val rowsAffected = wisdomDao.reassignWisdomCategoryToGeneral(categoryToClear, generalCategoryName)
+            Log.d(TAG, "Cleared category '$categoryToClear' by reassigning $rowsAffected items to '$generalCategoryName'.")
+            Result.success(rowsAffected)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing category '$categoryToClear' to '$generalCategoryName'", e)
+            Result.failure(e)
+        }
+    }
 }

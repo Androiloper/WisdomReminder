@@ -15,15 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.wisdomreminder.ui.theme.*
+import com.example.wisdomreminder.ui.wisdom.CategoryDropdownItem // Assuming reuse
 
-/**
- * A component that displays a category filter dropdown
- */
 @Composable
 fun CategoryFilter(
     allCategories: List<String>,
@@ -38,30 +35,27 @@ fun CategoryFilter(
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Absolute.Right
+        horizontalArrangement = Arrangement.Absolute.Right // Keeps it to the right
     ) {
         Button(
             onClick = { showCategoryDialog = true },
             colors = ButtonDefaults.buttonColors(
                 containerColor = NebulaPurple.copy(alpha = 0.7f)
             ),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            shape = MaterialTheme.shapes.medium
         ) {
             Icon(
                 imageVector = Icons.Default.List,
                 contentDescription = "Filter by Category",
                 modifier = Modifier.size(16.dp)
             )
-
             Spacer(modifier = Modifier.width(8.dp))
-
             Text(
                 text = selectedCategory ?: "All Categories",
                 style = MaterialTheme.typography.bodyMedium
             )
-
             Spacer(modifier = Modifier.width(4.dp))
-
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
                 contentDescription = null,
@@ -71,9 +65,9 @@ fun CategoryFilter(
     }
 
     if (showCategoryDialog) {
-        CategorySelectionDialog(
-            categories = listOf("All Categories") + allCategories.sorted(),
-            selectedCategory = selectedCategory ?: "All Categories",
+        FilterCategorySelectionDialog( // Renamed to avoid confusion with the dashboard one
+            categories = listOf("All Categories") + allCategories.distinct().sorted(),
+            currentSelectedCategory = selectedCategory ?: "All Categories",
             onCategorySelected = { category ->
                 onCategorySelected(if (category == "All Categories") null else category)
                 showCategoryDialog = false
@@ -84,102 +78,54 @@ fun CategoryFilter(
 }
 
 @Composable
-private fun CategorySelectionDialog(
+private fun FilterCategorySelectionDialog(
     categories: List<String>,
-    selectedCategory: String,
+    currentSelectedCategory: String,
     onCategorySelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true
-        )
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
     ) {
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = GlassSurface,
+                containerColor = GlassSurface.copy(alpha = 0.95f), // Slightly more opaque
                 contentColor = StarWhite
             ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
             shape = MaterialTheme.shapes.large
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "SELECT CATEGORY",
-                    style = MaterialTheme.typography.titleMedium,
+                    "Filter by Category",
+                    style = MaterialTheme.typography.titleLarge, // Changed to titleLarge
                     color = ElectricGreen,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 300.dp)
-                ) {
-                    items(categories) { category ->
-                        CategoryItem(
-                            category = category,
-                            isSelected = category == selectedCategory,
-                            onClick = { onCategorySelected(category) }
-                        )
+                Box(modifier = Modifier.heightIn(max = 300.dp)) { // Constrain height for LazyColumn
+                    LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                        items(categories) { category ->
+                            CategoryDropdownItem( // Reusing the styled item
+                                text = category,
+                                isSelected = category == currentSelectedCategory,
+                                onClick = { onCategorySelected(category) }
+                            )
+                        }
                     }
                 }
-
                 Spacer(modifier = Modifier.height(16.dp))
-
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.align(Alignment.End)
                 ) {
-                    Text("CANCEL", color = StarWhite.copy(alpha = 0.7f))
+                    Text("CLOSE", color = StarWhite.copy(alpha = 0.7f))
                 }
             }
         }
     }
 }
-
-@Composable
-private fun CategoryItem(
-    category: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (isSelected) NebulaPurple.copy(alpha = 0.3f)
-                else Color.Transparent
-            )
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(
-            selected = isSelected,
-            onClick = onClick,
-            colors = RadioButtonDefaults.colors(
-                selectedColor = ElectricGreen,
-                unselectedColor = StarWhite.copy(alpha = 0.6f)
-            )
-        )
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Text(
-            text = category,
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (isSelected) ElectricGreen else StarWhite
-        )
-    }
-}
+// If CategoryDropdownItem is not public from AddWisdomDialog.kt, you'll need its definition here too:
+// @Composable
+// fun CategoryDropdownItem(text: String, isSelected: Boolean, onClick: () -> Unit) { ... }
