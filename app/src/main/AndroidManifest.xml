@@ -40,7 +40,6 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="specialUse" />
-
         <receiver
             android:name=".receiver.BootReceiver"
             android:enabled="true"

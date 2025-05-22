@@ -1,16 +1,12 @@
 package com.example.wisdomreminder.ui.main
 
-import android.util.Log
+import android.util.Log // Added Log import
 import android.widget.Toast
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -18,12 +14,10 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -31,8 +25,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -41,9 +33,6 @@ import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.ui.components.*
 import com.example.wisdomreminder.ui.theme.*
 import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
-// import com.example.wisdomreminder.ui.wisdom.QueuedWisdomItem // Not directly used if ActiveWisdomCard is preferred
-import java.time.format.DateTimeFormatter
-// import com.example.wisdomreminder.ui.components.CategoryExplorerCard // Imported via *
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +46,7 @@ fun MainScreen(
     val context = LocalContext.current
     var showAddWisdomDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+    val localTAG = "MainScreen" // For logging
 
     var selectedCategoryForExplorer by remember { mutableStateOf<String?>(null) }
 
@@ -70,7 +60,6 @@ fun MainScreen(
                 is MainViewModel.UiEvent.WisdomActivated -> {
                     Toast.makeText(context, "Wisdom activated", Toast.LENGTH_SHORT).show()
                 }
-                // Using the corrected event names from your latest MainViewModel
                 is MainViewModel.UiEvent.CategoryCardAdded -> {
                     Toast.makeText(context, "Category card added to dashboard", Toast.LENGTH_SHORT).show()
                 }
@@ -80,7 +69,12 @@ fun MainScreen(
                 is MainViewModel.UiEvent.Error -> {
                     Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
                 }
-                else -> { /* Handle WisdomDeleted and WisdomUpdated if needed, or other events */ }
+                MainViewModel.UiEvent.WisdomDeleted -> {
+                    Toast.makeText(context, "Wisdom deleted", Toast.LENGTH_SHORT).show()
+                }
+                MainViewModel.UiEvent.WisdomUpdated -> {
+                    Toast.makeText(context, "Wisdom updated", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -125,7 +119,7 @@ fun MainScreen(
                     }
                 }
             }
-            is MainViewModel.UiState.Success -> {
+            is MainViewModel.WisdomUiState.Success -> {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     containerColor = Color.Transparent,
@@ -138,7 +132,7 @@ fun MainScreen(
                                 Button(
                                     onClick = {
                                         if (state.serviceRunning) viewModel.stopWisdomService(context)
-                                        else viewModel.startWisdomService(context) // Changed from checkAndRestart
+                                        else viewModel.startService(context)
                                     },
                                     colors = ButtonDefaults.buttonColors(containerColor = if (state.serviceRunning) NeonPink.copy(alpha = 0.8f) else ElectricGreen.copy(alpha = 0.8f)),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -206,9 +200,12 @@ fun MainScreen(
                                 }
                             }
                         } else {
+                            Log.d(localTAG, "Dashboard rendering. Selected categories: ${state.selectedCategoriesForCards}. CategoryWisdomMap keys: ${state.categoryWisdomMap.keys}")
                             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 state.selectedCategoriesForCards.forEach { category ->
                                     val wisdomListForCategory = state.categoryWisdomMap[category] ?: emptyList()
+                                    // *** ADDED LOGGING HERE ***
+                                    Log.d(localTAG, "Dashboard Card: Category='${category}', Items=${wisdomListForCategory.size}, Wisdoms: ${wisdomListForCategory.joinToString { it.text.take(15) }}")
                                     CategoryWisdomCard(
                                         category = category,
                                         wisdomList = wisdomListForCategory,
@@ -232,12 +229,12 @@ fun MainScreen(
 
                         if (showCategorySelectionDialog) {
                             CategorySelectionDialog(
-                                availableCategories = state.allCategories,
+                                availableCategories = state.allCategories.filterNot { it in state.selectedCategoriesForCards },
                                 selectedCategories = state.selectedCategoriesForCards,
                                 onDismiss = { showCategorySelectionDialog = false },
                                 onCategorySelected = { category ->
                                     viewModel.addCategoryCard(category)
-                                    showCategorySelectionDialog = false // Dismiss after selection
+                                    showCategorySelectionDialog = false
                                 }
                             )
                         }
@@ -249,7 +246,6 @@ fun MainScreen(
                                 color = ElectricGreen,
                                 modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                             )
-                            // Using the WisdomComponents.ActiveWisdomCard
                             com.example.wisdomreminder.ui.components.ActiveWisdomCard(
                                 wisdom = state.activeWisdom.first(),
                                 onClick = { wisdom -> onWisdomClick(wisdom.id) },
@@ -274,6 +270,7 @@ fun MainScreen(
                             )
                         }
 
+
                         if (allWisdomItems.isEmpty() && state.activeWisdom.isEmpty()) {
                             Button(
                                 onClick = { viewModel.addSampleWisdom() },
@@ -281,6 +278,16 @@ fun MainScreen(
                                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 16.dp)
                             ) { Text("ADD SAMPLE WISDOM") }
                         }
+
+                        // Button for debugging DB content
+                        Button(
+                            onClick = { viewModel.debugDatabaseContents() },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentOrange),
+                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)
+                        ) {
+                            Text("DEBUG DB")
+                        }
+
                         Spacer(modifier = Modifier.height(80.dp))
                     }
                 }

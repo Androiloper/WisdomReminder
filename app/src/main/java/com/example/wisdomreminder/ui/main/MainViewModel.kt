@@ -18,6 +18,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow // Ensure Flow is imported
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,26 +26,33 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.combine // Crucial: ensure this is the ONLY combine import for flows
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import javax.inject.Inject
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val wisdomRepository: IWisdomRepository,
-    @ApplicationContext applicationContext: Context
+    @ApplicationContext private val applicationContext: Context
 ) : ViewModel() {
-    private val TAG = "MainViewModel"
+    private val TAG = "MainViewModel" // For logging
 
-    // Use Application Context for SharedPreferences to avoid memory leaks
     private val prefs: SharedPreferences = applicationContext.getSharedPreferences("wisdom_prefs", Context.MODE_PRIVATE)
     private val gson = Gson()
 
-    // Service status broadcast receiver
+    private val _uiState = MutableStateFlow<WisdomUiState>(WisdomUiState.Loading)
+    val uiState: StateFlow<WisdomUiState> = _uiState.asStateFlow()
+
+    private val _selectedWisdom = MutableStateFlow<Wisdom?>(null)
+    val selectedWisdom: StateFlow<Wisdom?> = _selectedWisdom.asStateFlow()
+
+    private val _selectedCategoriesForCards = MutableStateFlow<List<String>>(emptyList())
+
+    private val _events = MutableSharedFlow<UiEvent>()
+    val events = _events.asSharedFlow()
+
     private val serviceStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_SERVICE_STATUS_CHANGE) {
@@ -55,13 +63,21 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // Register the receiver when the ViewModel is initialized
     init {
-        applicationContext.registerReceiver(
-            serviceStatusReceiver,
-            IntentFilter(ACTION_SERVICE_STATUS_CHANGE),
-            Context.RECEIVER_NOT_EXPORTED
-        )
+        Log.d(TAG, "MainViewModel initialized")
+        val intentFilter = IntentFilter(ACTION_SERVICE_STATUS_CHANGE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            applicationContext.registerReceiver(
+                serviceStatusReceiver,
+                intentFilter,
+                Context.RECEIVER_NOT_EXPORTED
+            )
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            applicationContext.registerReceiver(serviceStatusReceiver, intentFilter)
+        }
+        loadSelectedCategoriesForCards()
+        initializeDataCollection()
     }
 
     companion object {
@@ -96,28 +112,13 @@ class MainViewModel @Inject constructor(
         data class Error(val message: String) : UiEvent()
     }
 
-    private val _uiState = MutableStateFlow<WisdomUiState>(WisdomUiState.Loading)
-    val uiState: StateFlow<WisdomUiState> = _uiState.asStateFlow()
-
-    private val _selectedWisdom = MutableStateFlow<Wisdom?>(null)
-    val selectedWisdom: StateFlow<Wisdom?> = _selectedWisdom.asStateFlow()
-
-    private val _selectedCategoriesForCards = MutableStateFlow<List<String>>(emptyList())
-
-    private val _events = MutableSharedFlow<UiEvent>()
-    val events = _events.asSharedFlow()
-
     private var dataCollectionJob: Job? = null
     private var categoryDataJob: Job? = null
 
-    init {
-        Log.d(TAG, "MainViewModel initialized")
-        loadSelectedCategoriesForCards()
-        initializeDataCollection()
-    }
 
     override fun onCleared() {
         Log.d(TAG, "MainViewModel onCleared")
+        applicationContext.unregisterReceiver(serviceStatusReceiver)
         dataCollectionJob?.cancel()
         categoryDataJob?.cancel()
         super.onCleared()
@@ -131,138 +132,134 @@ class MainViewModel @Inject constructor(
                     val type = object : TypeToken<List<String>>() {}.type
                     val categories: List<String> = gson.fromJson(categoriesJson, type)
                     _selectedCategoriesForCards.value = categories
-                    Log.d(TAG, "Loaded ${categories.size} selected categories for cards: $categories")
+                    Log.d(TAG, "loadSelectedCategories: Loaded ${categories.size} categories: $categories")
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error loading selected categories for cards", e)
+                    Log.e(TAG, "loadSelectedCategories: Error loading categories", e)
                     _selectedCategoriesForCards.value = emptyList()
                 }
             } else {
-                Log.d(TAG, "No selected categories for cards found in preferences.")
+                Log.d(TAG, "loadSelectedCategories: No categories found in prefs.")
                 _selectedCategoriesForCards.value = emptyList()
             }
         }
     }
 
+    // This is the function that was reported as an unresolved reference.
+    // It is included here.
     private fun saveSelectedCategoriesForCards(categories: List<String>) {
         viewModelScope.launch {
             try {
                 val categoriesJson = gson.toJson(categories)
                 prefs.edit().putString(SELECTED_CATEGORIES_FOR_CARDS_KEY, categoriesJson).apply()
-                Log.d(TAG, "Saved ${categories.size} selected categories for cards: $categories")
+                Log.d(TAG, "saveSelectedCategories: Saved ${categories.size} categories: $categories")
             } catch (e: Exception) {
-                Log.e(TAG, "Error saving selected categories for cards", e)
+                Log.e(TAG, "saveSelectedCategories: Error saving categories", e)
             }
         }
     }
 
     private fun initializeDataCollection() {
         dataCollectionJob?.cancel()
-        categoryDataJob?.cancel()
 
-        Log.d(TAG, "Initializing data collection.")
-        if (_uiState.value !is WisdomUiState.Success || (_uiState.value as? WisdomUiState.Success)?.activeWisdom?.isEmpty() == true) {
+        Log.d(TAG, "initializeDataCollection: Starting...")
+        if (_uiState.value !is WisdomUiState.Success) {
             _uiState.value = WisdomUiState.Loading
         }
 
-        // Main data collection job
         dataCollectionJob = viewModelScope.launch {
-            // Create a list of flows
-            val flowList = listOf(
-                wisdomRepository.getActiveWisdom(),
-                wisdomRepository.getQueuedWisdom(),
-                wisdomRepository.getCompletedWisdom(),
-                wisdomRepository.getActiveWisdomCount(),
-                wisdomRepository.getCompletedWisdomCount(),
-                wisdomRepository.getAllCategories(),
-                _selectedCategoriesForCards
+            val activeWisdomFlow: Flow<List<Wisdom>> = wisdomRepository.getActiveWisdom()
+            val queuedWisdomFlow: Flow<List<Wisdom>> = wisdomRepository.getQueuedWisdom()
+            val completedWisdomFlow: Flow<List<Wisdom>> = wisdomRepository.getCompletedWisdom()
+            val activeWisdomCountFlow: Flow<Int> = wisdomRepository.getActiveWisdomCount()
+            val completedWisdomCountFlow: Flow<Int> = wisdomRepository.getCompletedWisdomCount()
+            val allCategoriesFlow: Flow<List<String>> = wisdomRepository.getAllCategories()
+            val selectedCategoriesForCardsFlow: Flow<List<String>> = _selectedCategoriesForCards
+
+            val flows = listOf(
+                activeWisdomFlow, queuedWisdomFlow, completedWisdomFlow,
+                activeWisdomCountFlow, completedWisdomCountFlow, allCategoriesFlow,
+                selectedCategoriesForCardsFlow
             )
 
-            // Use the combine method that takes an iterable of flows and returns an array of results
-            combine(flowList) { values: Array<Any> ->
-                // Cast each value to its expected type
-                val active = values[0] as List<Wisdom>
-                val queued = values[1] as List<Wisdom>
-                val completed = values[2] as List<Wisdom>
-                val activeCount = values[3] as Int
-                val completedCount = values[4] as Int
-                val allCategories = values[5] as List<String>
-                val selectedCategories = values[6] as List<String>
+            combine(flows) { values: Array<Any?> ->
+                @Suppress("UNCHECKED_CAST") val active = values[0] as List<Wisdom>
+                @Suppress("UNCHECKED_CAST") val queued = values[1] as List<Wisdom>
+                @Suppress("UNCHECKED_CAST") val completed = values[2] as List<Wisdom>
+                @Suppress("UNCHECKED_CAST") val activeCount = values[3] as Int
+                @Suppress("UNCHECKED_CAST") val completedCount = values[4] as Int
+                @Suppress("UNCHECKED_CAST") val allCategories = values[5] as List<String>
+                @Suppress("UNCHECKED_CAST") val selectedCategoriesValue = values[6] as List<String>
 
-                Log.d(TAG, "Combine transform block. Active: ${active.size}, Queued: ${queued.size}, SelectedCardCats: ${selectedCategories.size}")
-
-                // Get initial state without category map
+                Log.d(TAG, "initializeDataCollection (combine): Emitting Success. Selected dashboard categories: $selectedCategoriesValue")
+                val currentServiceStatus = WisdomDisplayService.isServiceRunning
                 WisdomUiState.Success(
-                    activeWisdom = active,
-                    queuedWisdom = queued,
-                    completedWisdom = completed,
-                    activeCount = activeCount,
-                    completedCount = completedCount,
-                    serviceRunning = WisdomDisplayService.isServiceRunning,
-                    allCategories = allCategories,
-                    selectedCategoriesForCards = selectedCategories,
-                    categoryWisdomMap = emptyMap()
+                    activeWisdom = active, queuedWisdom = queued, completedWisdom = completed,
+                    activeCount = activeCount, completedCount = completedCount,
+                    serviceRunning = currentServiceStatus, allCategories = allCategories,
+                    selectedCategoriesForCards = selectedCategoriesValue,
+                    categoryWisdomMap = (_uiState.value as? WisdomUiState.Success)?.categoryWisdomMap ?: emptyMap()
                 )
             }.catch { e ->
-                Log.e(TAG, "Exception in data collection combine block", e)
+                Log.e(TAG, "initializeDataCollection (combine): Exception", e)
                 _uiState.value = WisdomUiState.Error("Failed to load data: ${e.localizedMessage ?: "Unknown error"}")
             }.collectLatest { successState ->
                 _uiState.value = successState
-                Log.d(TAG, "UI State updated to Success. Active: ${successState.activeWisdom.size}, Service: ${successState.serviceRunning}")
-
-                // Trigger category data collection
+                Log.d(TAG, "initializeDataCollection (collectLatest): New Success state collected. Triggering updateCategoryData. Selected dashboard categories: ${successState.selectedCategoriesForCards}")
                 updateCategoryData()
             }
         }
     }
 
-// Add the right import for the right version of combine
-
-
-    // Helper class to hold main data
-    private data class MainData(
-        val active: List<Wisdom>,
-        val queued: List<Wisdom>,
-        val completed: List<Wisdom>,
-        val activeCount: Int,
-        val completedCount: Int,
-        val allCategories: List<String>
-    )
-
-    // Separate job for category data to avoid slowing down main UI updates
     private fun updateCategoryData() {
         categoryDataJob?.cancel()
         categoryDataJob = viewModelScope.launch {
-            try {
-                val selectedCategories = _selectedCategoriesForCards.value
-                if (selectedCategories.isEmpty()) {
-                    return@launch
+            val currentSuccessState = _uiState.value as? WisdomUiState.Success
+            if (currentSuccessState == null) {
+                Log.d(TAG, "updateCategoryData: Skipping, UI state is not Success.")
+                return@launch
+            }
+            val selectedCategories = currentSuccessState.selectedCategoriesForCards
+
+            if (selectedCategories.isEmpty()) {
+                if (currentSuccessState.categoryWisdomMap.isNotEmpty()) {
+                    Log.d(TAG, "updateCategoryData: No categories selected for dashboard, clearing map.")
+                    _uiState.value = currentSuccessState.copy(categoryWisdomMap = emptyMap())
+                } else {
+                    Log.d(TAG, "updateCategoryData: No categories selected and map already empty.")
                 }
+                return@launch
+            }
 
-                Log.d(TAG, "Updating category data for: $selectedCategories")
-                val categoryWisdomMap = mutableMapOf<String, List<Wisdom>>()
+            Log.d(TAG, "updateCategoryData: Updating for dashboard categories: $selectedCategories")
+            val newCategoryWisdomMap = mutableMapOf<String, List<Wisdom>>()
+            var mapChanged = false
 
-                // Process each category
-                for (category in selectedCategories) {
-                    try {
-                        val wisdomForCategory = wisdomRepository.getWisdomByCategory(category).first()
-                        categoryWisdomMap[category] = wisdomForCategory
-                        Log.d(TAG, "Fetched ${wisdomForCategory.size} items for category '$category'")
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error fetching wisdom for category '$category'", e)
-                        categoryWisdomMap[category] = emptyList()
+            for (category in selectedCategories) {
+                try {
+                    val wisdomForCategory = wisdomRepository.getWisdomByCategory(category).first()
+                    Log.d(TAG, "updateCategoryData: Processing category: $category. Found ${wisdomForCategory.size} items. Texts: ${wisdomForCategory.joinToString { it.text.take(15) }}")
+                    newCategoryWisdomMap[category] = wisdomForCategory
+                    if (currentSuccessState.categoryWisdomMap[category] != wisdomForCategory) {
+                        mapChanged = true
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "updateCategoryData: Error fetching wisdom for card category '$category'", e)
+                    newCategoryWisdomMap[category] = emptyList()
+                    if (currentSuccessState.categoryWisdomMap.containsKey(category)) mapChanged = true
                 }
+            }
 
-                // Update the UI state with the new category map
-                (_uiState.value as? WisdomUiState.Success)?.let { currentState ->
-                    _uiState.value = currentState.copy(categoryWisdomMap = categoryWisdomMap)
-                    Log.d(TAG, "Updated UI state with category map containing ${categoryWisdomMap.size} categories")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error updating category data", e)
+            Log.d(TAG, "updateCategoryData: Final map for UI: ${newCategoryWisdomMap.mapValues { entry -> entry.value.map { wisdom -> wisdom.text.take(15) } }}")
+
+            if (mapChanged || currentSuccessState.categoryWisdomMap.keys != newCategoryWisdomMap.keys || currentSuccessState.categoryWisdomMap != newCategoryWisdomMap) {
+                Log.d(TAG, "updateCategoryData: Map changed, updating UI state.")
+                _uiState.value = currentSuccessState.copy(categoryWisdomMap = newCategoryWisdomMap)
+            } else {
+                Log.d(TAG, "updateCategoryData: Map unchanged, no UI update for map needed.")
             }
         }
     }
+
 
     fun addCategoryCard(category: String) {
         viewModelScope.launch {
@@ -271,7 +268,10 @@ class MainViewModel @Inject constructor(
                 currentCategories.add(category)
                 _selectedCategoriesForCards.value = currentCategories.toList()
                 saveSelectedCategoriesForCards(_selectedCategoriesForCards.value)
+                Log.d(TAG, "addCategoryCard: Added '$category'. Current selection: ${_selectedCategoriesForCards.value}")
                 _events.emit(UiEvent.CategoryCardAdded)
+            } else {
+                Log.d(TAG, "addCategoryCard: Category '$category' already present.")
             }
         }
     }
@@ -282,14 +282,10 @@ class MainViewModel @Inject constructor(
             if (currentCategories.remove(category)) {
                 _selectedCategoriesForCards.value = currentCategories.toList()
                 saveSelectedCategoriesForCards(_selectedCategoriesForCards.value)
+                Log.d(TAG, "removeCategoryCard: Removed '$category'. Current selection: ${_selectedCategoriesForCards.value}")
                 _events.emit(UiEvent.CategoryCardRemoved)
-
-                // Update UI state to remove this category from the map
-                (_uiState.value as? WisdomUiState.Success)?.let { currentState ->
-                    val updatedMap = currentState.categoryWisdomMap.toMutableMap()
-                    updatedMap.remove(category)
-                    _uiState.value = currentState.copy(categoryWisdomMap = updatedMap)
-                }
+            } else {
+                Log.d(TAG, "removeCategoryCard: Category '$category' not found in selection.")
             }
         }
     }
@@ -301,12 +297,12 @@ class MainViewModel @Inject constructor(
                 result.fold(
                     onSuccess = { wisdom -> _selectedWisdom.value = wisdom },
                     onFailure = { error ->
-                        Log.e(TAG, "Error getting wisdom by ID: $id", error)
+                        Log.e(TAG, "getWisdomById: Error for ID $id", error)
                         _events.emit(UiEvent.Error("Could not load wisdom details: ${error.message}"))
                     }
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Exception in getWisdomById", e)
+                Log.e(TAG, "getWisdomById: Exception for ID $id", e)
                 _events.emit(UiEvent.Error("An unexpected error occurred: ${e.message}"))
             }
         }
@@ -317,32 +313,29 @@ class MainViewModel @Inject constructor(
             viewModelScope.launch { _events.emit(UiEvent.Error("Wisdom text cannot be empty")) }
             return
         }
-        Log.d(TAG, "Attempting to add wisdom: Text='${text.take(20)}...', Source='$source', Category='$category'")
+        val wisdomCategory = category.ifBlank { "General" }
+        Log.d(TAG, "addWisdom: Text='${text.take(20)}...', Source='$source', Category='$wisdomCategory'")
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val wisdom = Wisdom(
                     text = text,
                     source = source,
-                    category = category.ifBlank { "General" },
+                    category = wisdomCategory,
                     dateCreated = LocalDateTime.now()
                 )
                 val result = wisdomRepository.addWisdom(wisdom)
                 result.fold(
                     onSuccess = { id ->
-                        Log.d(TAG, "Wisdom added with ID: $id")
+                        Log.d(TAG, "addWisdom: Success, ID=$id. Category='${wisdom.category}'")
                         _events.emit(UiEvent.WisdomAdded)
-                        // Trigger category data update if this wisdom belongs to a selected category
-                        if (_selectedCategoriesForCards.value.contains(wisdom.category)) {
-                            updateCategoryData()
-                        }
                     },
                     onFailure = { error ->
-                        Log.e(TAG, "Error adding wisdom", error)
+                        Log.e(TAG, "addWisdom: Error", error)
                         _events.emit(UiEvent.Error("Failed to add wisdom: ${error.localizedMessage ?: "Unknown error"}"))
                     }
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Exception in addWisdom", e)
+                Log.e(TAG, "addWisdom: Exception", e)
                 _events.emit(UiEvent.Error("An unexpected error occurred while adding wisdom: ${e.localizedMessage ?: "Unknown error"}"))
             }
         }
@@ -355,20 +348,16 @@ class MainViewModel @Inject constructor(
                     onSuccess = {
                         _events.emit(UiEvent.WisdomUpdated)
                         if (_selectedWisdom.value?.id == wisdom.id) {
-                            _selectedWisdom.value = wisdom
-                        }
-                        // Update category data if needed
-                        if (_selectedCategoriesForCards.value.contains(wisdom.category)) {
-                            updateCategoryData()
+                            getWisdomById(wisdom.id)
                         }
                     },
                     onFailure = { error ->
-                        Log.e(TAG, "Error updating wisdom: ${wisdom.id}", error)
+                        Log.e(TAG, "updateWisdom: Error for ID ${wisdom.id}", error)
                         _events.emit(UiEvent.Error("Failed to update wisdom: ${error.localizedMessage}"))
                     }
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Exception in updateWisdom", e)
+                Log.e(TAG, "updateWisdom: Exception for ID ${wisdom.id}", e)
                 _events.emit(UiEvent.Error("An unexpected error occurred: ${e.localizedMessage}"))
             }
         }
@@ -383,18 +372,14 @@ class MainViewModel @Inject constructor(
                         if (_selectedWisdom.value?.id == wisdom.id) {
                             _selectedWisdom.value = null
                         }
-                        // Update category data if needed
-                        if (_selectedCategoriesForCards.value.contains(wisdom.category)) {
-                            updateCategoryData()
-                        }
                     },
                     onFailure = { error ->
-                        Log.e(TAG, "Error deleting wisdom: ${wisdom.id}", error)
+                        Log.e(TAG, "deleteWisdom: Error for ID ${wisdom.id}", error)
                         _events.emit(UiEvent.Error("Failed to delete wisdom: ${error.localizedMessage}"))
                     }
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Exception in deleteWisdom", e)
+                Log.e(TAG, "deleteWisdom: Exception for ID ${wisdom.id}", e)
                 _events.emit(UiEvent.Error("An unexpected error occurred: ${e.localizedMessage}"))
             }
         }
@@ -408,7 +393,6 @@ class MainViewModel @Inject constructor(
                 return@launch
             }
 
-            Log.d(TAG, "ViewModel: Activating wisdom with ID: $wisdomId")
             try {
                 wisdomRepository.activateWisdom(wisdomId).fold(
                     onSuccess = {
@@ -418,12 +402,12 @@ class MainViewModel @Inject constructor(
                         }
                     },
                     onFailure = { error ->
-                        Log.e(TAG, "Error activating wisdom: $wisdomId", error)
+                        Log.e(TAG, "activateWisdom: Error for ID $wisdomId", error)
                         _events.emit(UiEvent.Error("Failed to activate wisdom: ${error.localizedMessage}"))
                     }
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Exception in activateWisdom", e)
+                Log.e(TAG, "activateWisdom: Exception for ID $wisdomId", e)
                 _events.emit(UiEvent.Error("An unexpected error occurred: ${e.localizedMessage}"))
             }
         }
@@ -431,62 +415,53 @@ class MainViewModel @Inject constructor(
 
     fun refreshData() {
         viewModelScope.launch {
-            Log.d(TAG, "Manual refresh triggered. Re-initializing data collection.")
+            Log.d(TAG, "refreshData: Manual refresh triggered.")
+            _uiState.value = WisdomUiState.Loading
             initializeDataCollection()
         }
     }
 
     private fun updateServiceRunningState(isRunning: Boolean) {
         viewModelScope.launch(Dispatchers.Main) {
-            Log.d(TAG, "Updating service running state to: $isRunning")
-            (_uiState.value as? WisdomUiState.Success)?.let { currentState ->
-                if (currentState.serviceRunning != isRunning) {
-                    _uiState.value = currentState.copy(serviceRunning = isRunning)
+            val currentUiState = _uiState.value
+            if (currentUiState is WisdomUiState.Success) {
+                if (currentUiState.serviceRunning != isRunning) {
+                    _uiState.value = currentUiState.copy(serviceRunning = isRunning)
+                    Log.d(TAG, "updateServiceRunningState: UI serviceRunning state updated to: $isRunning")
                 }
             }
         }
     }
+
 
     fun checkAndRestartService(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val isCurrentlyRunning = WisdomDisplayService.isServiceRunning
-                Log.d(TAG, "Checking service. Currently running: $isCurrentlyRunning")
+            val isCurrentlyRunning = WisdomDisplayService.isServiceRunning
+            updateServiceRunningState(isCurrentlyRunning)
 
-                if (!isCurrentlyRunning) {
-                    Log.d(TAG, "Service not running, attempting to start.")
-                    startWisdomService(context)
-                } else {
-                    // Update UI to match actual service state
-                    updateServiceRunningState(true)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error checking/restarting service status", e)
-                _events.emit(UiEvent.Error("Failed to check/restart service status"))
+            if (!isCurrentlyRunning) {
+                Log.d(TAG, "checkAndRestartService: Service not running, attempting to start.")
+                startService(context)
+            } else {
+                Log.d(TAG, "checkAndRestartService: Service is already running.")
             }
         }
     }
 
-    fun startWisdomService(context: Context) {
+    fun startService(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Starting WisdomDisplayService")
+                Log.d(TAG, "startService: Requesting WisdomDisplayService START")
                 val serviceIntent = Intent(context, WisdomDisplayService::class.java).apply {
                     action = WisdomDisplayService.ACTION_START_SERVICE
                 }
-
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(serviceIntent)
                 } else {
                     context.startService(serviceIntent)
                 }
-
-                Log.d(TAG, "WisdomDisplayService start requested")
-
-                // Service will broadcast its status when started
-                // We'll update UI state when we receive that broadcast
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to start service", e)
+                Log.e(TAG, "startService: Failed to start", e)
                 updateServiceRunningState(false)
                 _events.emit(UiEvent.Error("Failed to start wisdom service: ${e.localizedMessage}"))
             }
@@ -496,17 +471,13 @@ class MainViewModel @Inject constructor(
     fun stopWisdomService(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                Log.d(TAG, "Stopping WisdomDisplayService")
+                Log.d(TAG, "stopWisdomService: Requesting WisdomDisplayService STOP")
                 val serviceIntent = Intent(context, WisdomDisplayService::class.java).apply {
                     action = WisdomDisplayService.ACTION_STOP_SERVICE
                 }
                 context.startService(serviceIntent)
-                Log.d(TAG, "WisdomDisplayService stop requested")
-
-                // Service will broadcast its status when stopped
-                // We'll update UI state when we receive that broadcast
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to stop service", e)
+                Log.e(TAG, "stopWisdomService: Failed to stop", e)
                 _events.emit(UiEvent.Error("Failed to stop wisdom service: ${e.localizedMessage}"))
             }
         }
@@ -527,13 +498,11 @@ class MainViewModel @Inject constructor(
                 }
                 if (successCount > 0) {
                     _events.emit(UiEvent.WisdomAdded)
-                    // Update category data since we might have added wisdom to selected categories
-                    updateCategoryData()
                 } else {
                     _events.emit(UiEvent.Error("Failed to add sample wisdom"))
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error adding sample wisdom", e)
+                Log.e(TAG, "addSampleWisdom: Error", e)
                 _events.emit(UiEvent.Error("Failed to add sample wisdom: ${e.localizedMessage}"))
             }
         }
@@ -543,15 +512,26 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val allWisdom = wisdomRepository.getAllWisdom().first()
-                Log.d(TAG, "DEBUG - All wisdom in DB: ${allWisdom.size} items")
+                Log.d(TAG, "debugDatabaseContents: === All Wisdom in DB (${allWisdom.size}) ===")
                 allWisdom.forEach { wisdom ->
-                    Log.d(TAG, "DB Wisdom: ID=${wisdom.id}, Text='${wisdom.text.take(20)}...', Active=${wisdom.isActive}, Queued=${!wisdom.isActive && wisdom.dateCompleted == null}")
+                    Log.d(TAG, "DB Item: ID=${wisdom.id}, Text='${wisdom.text.take(30)}...', Cat='${wisdom.category}', Active=${wisdom.isActive}, Queued=${!wisdom.isActive && wisdom.dateCompleted == null}")
                 }
-                val activeResult = wisdomRepository.getActiveWisdomDirect().getOrNull() ?: emptyList()
-                Log.d(TAG, "DEBUG - Active wisdom direct from DB: ${activeResult.size} items")
-                activeResult.forEach { Log.d(TAG, "DB Active: ID=${it.id}, Text='${it.text.take(20)}...'") }
+                Log.d(TAG, "debugDatabaseContents: === End of All Wisdom ===")
+
+
+                (_uiState.value as? WisdomUiState.Success)?.let {
+                    Log.d(TAG, "debugDatabaseContents: === Current UI State ===")
+                    Log.d(TAG, "Selected Dashboard Categories: ${it.selectedCategoriesForCards}")
+                    Log.d(TAG, "Category Wisdom Map (Counts): ${it.categoryWisdomMap.mapValues { entry -> entry.value.size }}")
+                    it.categoryWisdomMap.forEach{ (cat, list) ->
+                        Log.d(TAG, "Map details for '$cat': ${list.joinToString { w -> w.text.take(15) }}")
+                    }
+                    Log.d(TAG, "debugDatabaseContents: === End of UI State ===")
+                }
+
+
             } catch (e: Exception) {
-                Log.e(TAG, "Error debugging database", e)
+                Log.e(TAG, "debugDatabaseContents: Error", e)
             }
         }
     }

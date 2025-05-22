@@ -1,29 +1,25 @@
-// SwipeableWisdomCards.kt - Fixed version to avoid ambiguity
-// This replaces the onCardClick with onWisdomClick for clarity
-
 package com.example.wisdomreminder.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PageSize
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -36,29 +32,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.ui.theme.CosmicAnimations
 import com.example.wisdomreminder.ui.theme.CyberBlue
@@ -69,274 +55,199 @@ import com.example.wisdomreminder.ui.theme.NeonPink
 import com.example.wisdomreminder.ui.theme.StarWhite
 import com.example.wisdomreminder.ui.theme.energyFlowEffect
 import com.example.wisdomreminder.ui.theme.glitchEffect
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
-import kotlin.math.sin
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Define a new, larger height for the component
+private val SWIPEABLE_CARDS_PAGER_HEIGHT = 340.dp // Increased from 280.dp
+private val EMPTY_CARD_HEIGHT = 340.dp          // Match the pager height for consistency
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun SwipeableWisdomCards(
     allWisdom: List<Wisdom>,
-    onWisdomClick: (Long) -> Unit,  // Change to onWisdomClick with Long parameter
+    onWisdomClick: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (allWisdom.isEmpty()) {
-        EmptyWisdomCard(modifier)
+        EmptyWisdomCard(
+            modifier = modifier
+                .height(EMPTY_CARD_HEIGHT) // Use the new height
+                .padding(horizontal = 16.dp) // Add horizontal padding similar to the pager's card
+        )
         return
     }
 
-    var currentIndex by remember { mutableIntStateOf(0) }
-    var offsetX by remember { mutableStateOf(0f) }
+    val pagerState = rememberPagerState(pageCount = { allWisdom.size })
     val coroutineScope = rememberCoroutineScope()
 
-    // Track animation state
-    var isAnimating by remember { mutableStateOf(false) }
-
-    // Control the visibility of navigation indicators
-    var showNavIndicators by remember { mutableStateOf(false) }
-
-    // Auto-hide nav indicators after delay
-    LaunchedEffect(showNavIndicators) {
-        if (showNavIndicators) {
-            delay(3000)
-            showNavIndicators = false
-        }
-    }
-
-    Box(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(280.dp)
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onDragStart = {
-                        showNavIndicators = true
-                    },
-                    onDragEnd = {
-                        if (abs(offsetX) > size.width / 4) {
-                            isAnimating = true
-                            if (offsetX > 0 && currentIndex > 0) {
-                                // Swipe right (to previous)
-                                currentIndex--
-                            } else if (offsetX < 0 && currentIndex < allWisdom.size - 1) {
-                                // Swipe left (to next)
-                                currentIndex++
-                            }
-                        }
-
-                        // Reset offset with animation
-                        coroutineScope.launch {
-                            offsetX = 0f
-                            delay(300)
-                            isAnimating = false
-                        }
-                    },
-                    onDragCancel = {
-                        offsetX = 0f
-                        isAnimating = false
-                    },
-                    onHorizontalDrag = { _, dragAmount ->
-                        if (!isAnimating) {
-                            // Limit dragging based on current index
-                            when {
-                                currentIndex == 0 && dragAmount > 0 -> {
-                                    // First card, can't go left, limit drag
-                                    offsetX = (offsetX + dragAmount).coerceIn(0f, 100f)
-                                }
-                                currentIndex == allWisdom.size - 1 && dragAmount < 0 -> {
-                                    // Last card, can't go right, limit drag
-                                    offsetX = (offsetX + dragAmount).coerceIn(-100f, 0f)
-                                }
-                                else -> {
-                                    // Normal case, allow dragging
-                                    offsetX += dragAmount
-                                }
-                            }
-                        }
-                    }
-                )
-            }
+            .padding(vertical = 8.dp), // Add some vertical padding to the whole section
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Current wisdom card with offset animation
-        val currentWisdom = allWisdom.getOrNull(currentIndex) ?: return@Box
-
-        // Calculate card scale based on drag
-        val scale = animateFloatAsState(
-            targetValue = 1f - (abs(offsetX) / 2000f),
-            animationSpec = spring(stiffness = Spring.StiffnessLow),
-            label = "card scale"
-        )
-
-        // Calculate card rotation based on drag
-        val rotation = animateFloatAsState(
-            targetValue = offsetX / 50f,
-            animationSpec = spring(stiffness = Spring.StiffnessLow),
-            label = "card rotation"
-        )
-
-        // Main card
-        Card(
+        HorizontalPager(
+            state = pagerState,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
-                .offset { IntOffset(offsetX.toInt(), 0) }
-                .graphicsLayer {
-                    scaleX = scale.value
-                    scaleY = scale.value
-                    rotationZ = rotation.value
-                }
-                .then(CosmicAnimations.floatEffect(floatMagnitude = 3f))
-                .then(CosmicAnimations.glowEffect(glowColor = NebulaPurple))
-                .energyFlowEffect(colors = listOf(NebulaPurple, CyberBlue, NeonPink.copy(alpha = 0.5f)))
-                .zIndex(1f),
-            colors = CardDefaults.cardColors(
-                containerColor = GlassSurface.copy(alpha = 0.7f),
-                contentColor = StarWhite
-            ),
-            elevation = CardDefaults.cardElevation(
-                defaultElevation = 8.dp
-            ),
-            border = BorderStroke(
-                width = 1.dp,
-                brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        NebulaPurple.copy(alpha = 0.7f),
-                        CyberBlue.copy(alpha = 0.7f),
-                        NeonPink.copy(alpha = 0.7f)
-                    )
-                )
-            ),
-            onClick = { onWisdomClick(currentWisdom.id) }  // Modified to pass the id directly
-        ) {
-            Column(
+                .height(SWIPEABLE_CARDS_PAGER_HEIGHT),
+            contentPadding = PaddingValues(horizontal = 40.dp), // Shows glimpses of adjacent cards
+            pageSize = PageSize.Fill // Each page (card) will fill the available space
+        ) { pageIndex ->
+            val wisdom = allWisdom[pageIndex]
+            SingleWisdomDisplayCard(
+                wisdom = wisdom,
+                onClick = { onWisdomClick(wisdom.id) },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxSize() // Card fills the item allocated by Pager
+                    .graphicsLayer { // Optional: Add some transition effects
+                        val pageOffset = pagerState.getOffsetFractionForPage(pageIndex)
+                        alpha = 1f - abs(pageOffset * 0.7f) // Fade out further pages
+                        scaleX = 1f - abs(pageOffset * 0.25f)
+                        scaleY = 1f - abs(pageOffset * 0.25f)
+                        // You can add translationX effects here too for a parallax effect
+                        translationX = pageOffset * (size.width * 0.1f)
+                    }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp)) // Increased spacing
+
+        // Navigation Controls (Arrows and Page Indicator)
+        Row(
+            Modifier
+                .height(48.dp) // Standard height for controls
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = {
+                    coroutineScope.launch {
+                        val prevPage = (pagerState.currentPage - 1).coerceAtLeast(0)
+                        pagerState.animateScrollToPage(prevPage)
+                    }
+                },
+                enabled = pagerState.currentPage > 0
             ) {
-                // Category badge at top
-                Surface(
-                    color = NebulaPurple.copy(alpha = 0.2f),
-                    shape = MaterialTheme.shapes.small,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                ) {
-                    Text(
-                        text = currentWisdom.category.uppercase(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = NebulaPurple,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
-                }
-
-                // Wisdom text
-                Text(
-                    text = "\"${currentWisdom.text}\"",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.3.sp
-                    ),
-                    color = StarWhite,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .padding(vertical = 16.dp)
-                        .glitchEffect(intensity = 0.01f, glitchInterval = 10000L)
+                Icon(
+                    Icons.Default.KeyboardArrowLeft,
+                    contentDescription = "Previous Wisdom",
+                    tint = if (pagerState.currentPage > 0) ElectricGreen else ElectricGreen.copy(alpha = 0.4f),
+                    modifier = Modifier.size(32.dp) // Slightly larger icons
                 )
-
-                // Source if available
-                if (currentWisdom.source.isNotBlank()) {
-                    Text(
-                        text = "— ${currentWisdom.source}",
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontStyle = FontStyle.Italic
-                        ),
-                        color = CyberBlue,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                    )
-                }
-            }
-        }
-
-        // Navigation indicators (arrows)
-        AnimatedVisibility(
-            visible = showNavIndicators,
-            enter = fadeIn(animationSpec = tween(300)),
-            exit = fadeOut(animationSpec = tween(500))
-        ) {
-            // Left arrow (previous)
-            if (currentIndex > 0) {
-                IconButton(
-                    onClick = {
-                        if (!isAnimating) {
-                            isAnimating = true
-                            coroutineScope.launch {
-                                offsetX = 300f // Simulate right swipe
-                                delay(50)
-                                currentIndex--
-                                delay(50)
-                                offsetX = 0f
-                                delay(300)
-                                isAnimating = false
-                            }
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowLeft,
-                        contentDescription = "Previous",
-                        tint = ElectricGreen.copy(alpha = 0.8f),
-                        modifier = Modifier.scale(1.5f)
-                    )
-                }
             }
 
-            // Right arrow (next)
-            if (currentIndex < allWisdom.size - 1) {
-                IconButton(
-                    onClick = {
-                        if (!isAnimating) {
-                            isAnimating = true
-                            coroutineScope.launch {
-                                offsetX = -300f // Simulate left swipe
-                                delay(50)
-                                currentIndex++
-                                delay(50)
-                                offsetX = 0f
-                                delay(300)
-                                isAnimating = false
-                            }
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowRight,
-                        contentDescription = "Next",
-                        tint = ElectricGreen.copy(alpha = 0.8f),
-                        modifier = Modifier.scale(1.5f)
-                    )
-                }
-            }
-        }
-
-        // Page indicator dots
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 8.dp)
-        ) {
             PageIndicator(
                 pageCount = allWisdom.size,
-                currentPage = currentIndex
+                currentPage = pagerState.currentPage,
+                modifier = Modifier.padding(horizontal = 16.dp),
+                selectedColor = NeonPink,
+                unselectedColor = StarWhite.copy(alpha = 0.5f)
             )
+
+            IconButton(
+                onClick = {
+                    coroutineScope.launch {
+                        val nextPage = (pagerState.currentPage + 1).coerceAtMost(allWisdom.size - 1)
+                        pagerState.animateScrollToPage(nextPage)
+                    }
+                },
+                enabled = pagerState.currentPage < allWisdom.size - 1
+            ) {
+                Icon(
+                    Icons.Default.KeyboardArrowRight,
+                    contentDescription = "Next Wisdom",
+                    tint = if (pagerState.currentPage < allWisdom.size - 1) ElectricGreen else ElectricGreen.copy(alpha = 0.4f),
+                    modifier = Modifier.size(32.dp) // Slightly larger icons
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SingleWisdomDisplayCard(
+    wisdom: Wisdom,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .padding(vertical = 8.dp) // Padding for the card within the Pager item
+            // Apply animations directly to the card that will be paged
+            .then(CosmicAnimations.floatEffect(floatMagnitude = 1.5f, floatSpeed = 3500))
+            .then(CosmicAnimations.glowEffect(glowColor = NebulaPurple.copy(alpha = 0.6f), glowAlphaRange = 0.2f..0.5f))
+            .energyFlowEffect(colors = listOf(NebulaPurple.copy(alpha = 0.8f), CyberBlue.copy(alpha = 0.7f), NeonPink.copy(alpha = 0.6f)), flowSpeed = 4000)
+            .glitchEffect(intensity = 0.005f, glitchInterval = 12000L),
+        colors = CardDefaults.cardColors(
+            containerColor = GlassSurface.copy(alpha = 0.75f), // Slightly more opaque for readability
+            contentColor = StarWhite
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp), // Slightly more elevation
+        border = BorderStroke(
+            width = 1.5.dp, // Slightly thicker border
+            brush = Brush.horizontalGradient(
+                listOf(
+                    NebulaPurple.copy(alpha = 0.8f),
+                    CyberBlue.copy(alpha = 0.8f),
+                    NeonPink.copy(alpha = 0.8f)
+                )
+            )
+        ),
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large // More rounded corners
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize() // Card content fills the card
+                .padding(horizontal = 20.dp, vertical = 24.dp), // Generous internal padding
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center // Center content vertically
+        ) {
+            // Category badge
+            if (wisdom.category.isNotBlank()) {
+                Surface(
+                    color = NebulaPurple.copy(alpha = 0.25f),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.padding(bottom = 16.dp) // Space below badge
+                ) {
+                    Text(
+                        text = wisdom.category.uppercase(),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
+                        color = NebulaPurple,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            // Wisdom text - increased font size
+            Text(
+                text = "\"${wisdom.text}\"",
+                style = MaterialTheme.typography.headlineSmall.copy( // Made text larger
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 28.sp // Adjust line height for better readability
+                ),
+                color = StarWhite,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(vertical = 8.dp) // Adjusted padding
+            )
+
+            // Source if available - slightly larger
+            if (wisdom.source.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp)) // More space before source
+                Text(
+                    text = "— ${wisdom.source}",
+                    style = MaterialTheme.typography.bodyMedium.copy( // Made source text slightly larger
+                        fontStyle = FontStyle.Italic
+                    ),
+                    color = CyberBlue.copy(alpha = 0.9f),
+                    textAlign = TextAlign.Center, // Center align source if wisdom is centered
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
@@ -346,32 +257,33 @@ private fun EmptyWisdomCard(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(16.dp)
-            .height(280.dp),
+            // .height(EMPTY_CARD_HEIGHT) // Height is applied by the caller
+            .padding(vertical = 8.dp), // Match vertical padding of SingleWisdomDisplayCard
         colors = CardDefaults.cardColors(
             containerColor = GlassSurface.copy(alpha = 0.4f),
             contentColor = StarWhite
         ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 4.dp
-        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         border = BorderStroke(
             width = 1.dp,
             brush = Brush.horizontalGradient(
-                colors = listOf(
+                listOf(
                     NebulaPurple.copy(alpha = 0.3f),
                     CyberBlue.copy(alpha = 0.3f)
                 )
             )
-        )
+        ),
+        shape = MaterialTheme.shapes.large
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            modifier = Modifier
+                .fillMaxSize() // Fill the card
+                .padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "Add wisdom to start your journey",
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleMedium, // Slightly larger empty state text
                 color = StarWhite.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
             )
@@ -379,45 +291,31 @@ private fun EmptyWisdomCard(modifier: Modifier = Modifier) {
     }
 }
 
+// PageIndicator composable (assuming it's defined elsewhere or is simple like below)
+// If you already have PageIndicator, you can use that.
 @Composable
 fun PageIndicator(
     pageCount: Int,
     currentPage: Int,
-    selectedColor: androidx.compose.ui.graphics.Color = NeonPink,
-    unselectedColor: androidx.compose.ui.graphics.Color = StarWhite.copy(alpha = 0.3f),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedColor: Color = NeonPink,
+    unselectedColor: Color = StarWhite.copy(alpha = 0.3f)
 ) {
-    Box(
-        modifier = modifier
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp), // Spacing between dots
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // Create a row of dots
-        androidx.compose.foundation.layout.Row(
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
-        ) {
-            repeat(pageCount) { index ->
-                val isSelected = index == currentPage
-                val size = animateFloatAsState(
-                    targetValue = if (isSelected) 8f else 6f,
-                    animationSpec = spring(stiffness = Spring.StiffnessLow),
-                    label = "dot size"
-                )
-
-                Box(
-                    modifier = Modifier
-                        .padding(4.dp)
-                        .scale(size.value / 6f)
-                        .alpha(if (isSelected) 1f else 0.5f)
-                ) {
-                    androidx.compose.foundation.Canvas(
-                        modifier = Modifier
-                            .size(6.dp)
-                    ) {
-                        drawCircle(
-                            color = if (isSelected) selectedColor else unselectedColor
-                        )
-                    }
-                }
-            }
+        repeat(pageCount) { iteration ->
+            val color = if (currentPage == iteration) selectedColor else unselectedColor
+            val size = if (currentPage == iteration) 10.dp else 8.dp // Larger selected dot
+            Box(
+                modifier = Modifier
+                    .size(size)
+                    .scale(1f) // To ensure crispness, avoid scaling Box if not needed for animation
+                    .alpha(if (currentPage == iteration) 1f else 0.5f)
+                    .background(color, shape = CircleShape)
+            )
         }
     }
 }

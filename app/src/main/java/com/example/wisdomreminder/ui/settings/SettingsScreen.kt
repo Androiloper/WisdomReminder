@@ -7,7 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
-import androidx.annotation.RequiresApi // Added for clarity, though it was in your original
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -22,9 +22,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.rounded.Face // Changed for alarm icon
+import androidx.compose.material.icons.rounded.Notifications // Using rounded icon for consistency
 import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Face // Using Face for Alarms icon
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -58,7 +59,7 @@ private fun hasExactAlarmPermission(context: Context): Boolean {
 @Composable
 fun SettingsScreen(
     onBackClick: () -> Unit,
-    viewModel: SettingsViewModel = hiltViewModel() // Ensure this line is exactly as here
+    viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -71,7 +72,7 @@ fun SettingsScreen(
     val eveningAlarmTime by viewModel.eveningAlarmTime.collectAsState()
 
     var showTimePickerDialog by remember { mutableStateOf(false) }
-    var timePickerMode by remember { mutableStateOf("morning") }
+    var timePickerMode by remember { mutableStateOf("morning") } // "morning" or "evening"
     var showPermissionDialog by remember { mutableStateOf(false) }
 
     val handleAlarmToggle: (Boolean) -> Unit = { isEnabled ->
@@ -83,11 +84,10 @@ fun SettingsScreen(
         }
     }
 
-    LaunchedEffect(alarmsEnabled, context) { // Add context to LaunchedEffect key if needed for permission check
-        if (alarmsEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    LaunchedEffect(alarmsEnabled, morningAlarmEnabled, eveningAlarmEnabled, context) {
+        if (alarmsEnabled && (morningAlarmEnabled || eveningAlarmEnabled) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (!hasExactAlarmPermission(context)) {
-                // Optionally re-prompt or update UI if permission is critical and not granted
-                // For now, it relies on the toggle handler to show the dialog.
+                // This could be a place to show a non-blocking reminder if permission is still needed
             }
         }
     }
@@ -102,7 +102,7 @@ fun SettingsScreen(
                     val x = (Math.random() * size.width).toFloat()
                     val y = (Math.random() * size.height).toFloat()
                     val radius = (Math.random() * 2f + 0.5f).toFloat()
-                    val alphaVal = (Math.random() * 0.8f + 0.2f).toFloat() // Renamed to avoid conflict
+                    val alphaVal = (Math.random() * 0.8f + 0.2f).toFloat()
                     drawCircle(color = StarWhite.copy(alpha = alphaVal), radius = radius, center = Offset(x, y))
                 }
             }
@@ -155,10 +155,10 @@ fun SettingsScreen(
                         )
                         if (notificationsEnabled) {
                             Text(
-                                "Regular notifications will show wisdom throughout the day",
+                                "Regular notifications will show wisdom throughout the day.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = StarWhite.copy(alpha = 0.7f),
-                                modifier = Modifier.padding(start = 40.dp)
+                                modifier = Modifier.padding(start = 40.dp) // Aligned with icon space
                             )
                         }
                     }
@@ -171,7 +171,7 @@ fun SettingsScreen(
                             text = "Daily Wisdom Alarms",
                             isChecked = alarmsEnabled,
                             onCheckedChange = handleAlarmToggle,
-                            icon = Icons.Rounded.Face
+                            icon = Icons.Rounded.Face // Using Face icon
                         )
                         if (alarmsEnabled) {
                             Divider(color = GlassSurfaceLight, modifier = Modifier.padding(vertical = 8.dp))
@@ -223,7 +223,10 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.End
                         ) {
                             Button(
-                                onClick = { /* TODO: Open About Dialog or Info Screen */ },
+                                onClick = {
+                                    // Placeholder for About Dialog or Screen
+                                    Toast.makeText(context, "More info coming soon!", Toast.LENGTH_SHORT).show()
+                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = CyberBlue)
                             ) {
                                 Icon(Icons.Rounded.Info, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -233,7 +236,7 @@ fun SettingsScreen(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp)) // Bottom padding
             }
         }
 
@@ -252,7 +255,7 @@ fun SettingsScreen(
                         viewModel.setEveningAlarmTime(formattedTime)
                     }
                     showTimePickerDialog = false
-                    Toast.makeText(context, "Time set to $formattedTime", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "${if (timePickerMode == "morning") "Morning" else "Evening"} alarm set to $formattedTime", Toast.LENGTH_SHORT).show()
                 }
             )
         }
@@ -260,39 +263,42 @@ fun SettingsScreen(
         if (showPermissionDialog && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             AlertDialog(
                 onDismissRequest = { showPermissionDialog = false },
-                title = { Text("Permission Required") },
-                text = { Text("This app needs exact alarm permission to schedule wisdom reminders at specific times. Please grant this permission in the next screen.") },
+                title = { Text("Permission Required", color = ElectricGreen) },
+                text = { Text("This app needs permission to schedule exact alarms for wisdom reminders at specific times. Please grant this permission in the app settings.", color = StarWhite) },
                 confirmButton = {
                     Button(
                         onClick = {
                             showPermissionDialog = false
-                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                                data = Uri.parse("package:${context.packageName}")
+                            try {
+                                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Could not open settings. Please grant permission manually.", Toast.LENGTH_LONG).show()
                             }
-                            context.startActivity(intent)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = NebulaPurple)
                     ) { Text("Open Settings") }
                 },
-                dismissButton = { TextButton(onClick = { showPermissionDialog = false }) { Text("Later") } },
-                containerColor = GlassSurfaceDark, // Ensure these colors are defined in your theme
-                titleContentColor = ElectricGreen,
-                textContentColor = StarWhite
+                dismissButton = {
+                    TextButton(onClick = { showPermissionDialog = false }) {
+                        Text("Later", color = StarWhite.copy(alpha = 0.7f))
+                    }
+                },
+                containerColor = GlassSurfaceDark,
+                tonalElevation = 12.dp
             )
         }
     }
 }
-
-// SectionHeader, FuturisticToggle, AlarmTimeSetting, TimePickerDialog, NumberPicker,
-// parseTimeString, formatTimeString, formatTimeDisplay functions should be here.
-// (Re-adding them for completeness as they were mentioned as not repeated previously)
 
 @Composable
 fun SectionHeader(title: String) {
     Text(
         text = title,
         style = MaterialTheme.typography.titleLarge,
-        color = NeonPink, // Make sure NeonPink is defined in your theme
+        color = NeonPink,
         modifier = Modifier.padding(vertical = 8.dp)
     )
 }
@@ -302,157 +308,171 @@ fun FuturisticToggle(
     text: String,
     isChecked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    icon: ImageVector
 ) {
     val scale by animateFloatAsState(
-        targetValue = if (isChecked) 1.03f else 1f,
+        targetValue = if (isChecked) 1.0f else 1f, // Subtle or no scale effect if preferred
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
         ),
-        label = "toggle_animation_scale" // Added label
+        label = "toggle_animation_scale"
     )
 
-    Surface( // Use Surface for better click handling and semantics
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .scale(scale) // Apply scale here
-            .clip(MaterialTheme.shapes.medium) // Clip before background
-            .background(GlassSurface.copy(alpha = if (isChecked) 0.7f else 0.4f))
-            .clickable { onCheckedChange(!isChecked) } // Make the whole row clickable
-            .padding(16.dp),
-        color = Color.Transparent // Surface itself is transparent, background is on modifier
+            .scale(scale)
+            .clip(MaterialTheme.shapes.medium)
+            .background(GlassSurface.copy(alpha = if (isChecked) 0.6f else 0.3f))
+            .clickable { onCheckedChange(!isChecked) } // Entire row is clickable
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                (if (isChecked) ElectricGreen else Color.Gray).copy(alpha = 0.2f),
-                                Color.Transparent
-                            )
-                        ),
-                        shape = CircleShape
+        Box(
+            modifier = Modifier
+                .size(36.dp) // Slightly larger icon box
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            (if (isChecked) ElectricGreen else MoonGray).copy(alpha = 0.15f),
+                            Color.Transparent
+                        )
                     ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null, // Content description could be text for accessibility
-                    tint = if (isChecked) ElectricGreen else Color.Gray,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
-                color = StarWhite
-            )
-            Switch(
-                checked = isChecked,
-                onCheckedChange = onCheckedChange, // Called by parent Row's clickable now
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = NebulaPurple,
-                    checkedTrackColor = ElectricGreen.copy(alpha = 0.3f),
-                    checkedBorderColor = ElectricGreen,
-                    uncheckedThumbColor = Color.Gray,
-                    uncheckedTrackColor = Color.DarkGray.copy(alpha = 0.3f),
-                    uncheckedBorderColor = Color.Gray
-                )
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = text, // Better for accessibility
+                tint = if (isChecked) ElectricGreen else MoonGray,
+                modifier = Modifier.size(20.dp)
             )
         }
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+            color = StarWhite
+        )
+        Switch(
+            checked = isChecked,
+            onCheckedChange = onCheckedChange, // This will be called by the Row's clickable
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = NebulaPurple,
+                checkedTrackColor = ElectricGreen.copy(alpha = 0.4f),
+                checkedBorderColor = ElectricGreen.copy(alpha = 0.6f),
+                uncheckedThumbColor = MoonGray,
+                uncheckedTrackColor = GlassSurfaceLight.copy(alpha = 0.5f),
+                uncheckedBorderColor = MoonGray.copy(alpha = 0.5f)
+            )
+        )
     }
 }
 
 
 @Composable
-fun AlarmTimeSetting( // Re-added for completeness from previous context
+fun AlarmTimeSetting(
     label: String,
     isEnabled: Boolean,
     time: String,
     onEnableChange: (Boolean) -> Unit,
     onTimeClick: () -> Unit
 ) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = isEnabled,
-                    onCheckedChange = onEnableChange,
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = NebulaPurple,
-                        uncheckedColor = StarWhite.copy(alpha = 0.6f),
-                        checkmarkColor = StarWhite
-                    )
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = isEnabled,
+                onCheckedChange = onEnableChange,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = NebulaPurple,
+                    uncheckedColor = StarWhite.copy(alpha = 0.6f),
+                    checkmarkColor = StarWhite
                 )
-                Text(label, style = MaterialTheme.typography.bodyMedium, color = StarWhite)
-            }
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.bodyLarge, color = StarWhite, modifier = Modifier.weight(1f))
+
             if (isEnabled) {
-                Text(
-                    "Daily at $time",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ElectricGreen,
-                    modifier = Modifier.padding(start = 52.dp) // Align with Checkbox text
-                )
+                Button(
+                    onClick = onTimeClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ElectricGreen.copy(alpha = 0.2f),
+                        contentColor = ElectricGreen
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(time, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
         if (isEnabled) {
-            Button(
-                onClick = onTimeClick,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ElectricGreen.copy(alpha = 0.2f),
-                    contentColor = ElectricGreen
-                )
-            ) { Text("SET TIME") }
+            Text(
+                "Daily alarm set for $time",
+                style = MaterialTheme.typography.bodySmall,
+                color = StarWhite.copy(alpha = 0.7f),
+                modifier = Modifier.padding(start = 48.dp) // Align with Checkbox text start
+            )
         }
     }
 }
 
-
 @Composable
-fun TimePickerDialog( // Re-added for completeness
+fun TimePickerDialog(
     initialHour: Int,
     initialMinute: Int,
     title: String,
     onDismiss: () -> Unit,
     onTimeSelected: (hour: Int, minute: Int) -> Unit
 ) {
-    var hour by remember { mutableStateOf(initialHour) }
-    var minute by remember { mutableStateOf(initialMinute) }
+    var hour by remember { mutableIntStateOf(initialHour) }
+    var minute by remember { mutableIntStateOf(initialMinute) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = GlassSurfaceDark, // Make sure this color is defined
+                containerColor = GlassSurfaceDark,
                 contentColor = StarWhite
             ),
             modifier = Modifier.fillMaxWidth().padding(16.dp),
-            shape = MaterialTheme.shapes.large
+            shape = MaterialTheme.shapes.large,
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(title, style = MaterialTheme.typography.titleLarge, color = ElectricGreen, modifier = Modifier.padding(bottom = 16.dp))
+                Text(title, style = MaterialTheme.typography.titleLarge, color = ElectricGreen, modifier = Modifier.padding(bottom = 24.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     NumberPicker(value = hour, onValueChange = { hour = it }, range = 0..23, format = { it.toString().padStart(2, '0') })
-                    Text(":", style = MaterialTheme.typography.headlineLarge, color = ElectricGreen, modifier = Modifier.padding(horizontal = 16.dp))
+                    Text(":", style = MaterialTheme.typography.headlineLarge, color = ElectricGreen, modifier = Modifier.padding(horizontal = 20.dp))
                     NumberPicker(value = minute, onValueChange = { minute = it }, range = 0..59, step = 1, format = { it.toString().padStart(2, '0') })
                 }
-                Text(formatTimeDisplay(hour, minute), style = MaterialTheme.typography.bodyMedium, color = StarWhite.copy(alpha = 0.7f), modifier = Modifier.padding(top = 8.dp, bottom = 24.dp))
+                Text(
+                    formatTimeDisplay(hour, minute),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = StarWhite.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(top = 16.dp, bottom = 24.dp)
+                )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = StarWhite.copy(alpha = 0.7f))) { Text("CANCEL") }
-                    Button(onClick = { onTimeSelected(hour, minute) }, colors = ButtonDefaults.buttonColors(containerColor = NebulaPurple), modifier = Modifier.padding(start = 16.dp)) { Text("SET") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = { onTimeSelected(hour, minute) },
+                        colors = ButtonDefaults.buttonColors(containerColor = NebulaPurple),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
+                    ) { Text("SET") }
                 }
             }
         }
@@ -460,43 +480,43 @@ fun TimePickerDialog( // Re-added for completeness
 }
 
 @Composable
-fun NumberPicker( // Re-added for completeness
+fun NumberPicker(
     value: Int,
     onValueChange: (Int) -> Unit,
     range: IntRange,
     step: Int = 1,
     format: (Int) -> String = { it.toString() }
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         IconButton(
-            onClick = { onValueChange( (value + step).coerceIn(range.first, range.last) ) }, // Simplified update
-            modifier = Modifier.clip(CircleShape).background(NebulaPurple.copy(alpha = 0.2f))
+            onClick = { onValueChange( (value + step).coerceIn(range.first, range.last) ) },
+            modifier = Modifier.size(40.dp).clip(CircleShape).background(NebulaPurple.copy(alpha = 0.2f))
         ) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Increase", tint = NebulaPurple) }
 
-        Text(format(value), style = MaterialTheme.typography.headlineMedium, color = StarWhite, modifier = Modifier.padding(vertical = 8.dp))
+        Text(format(value), style = MaterialTheme.typography.headlineMedium, color = StarWhite, modifier = Modifier.padding(vertical = 4.dp))
 
         IconButton(
-            onClick = { onValueChange( (value - step).coerceIn(range.first, range.last) ) }, // Simplified update
-            modifier = Modifier.clip(CircleShape).background(NebulaPurple.copy(alpha = 0.2f))
+            onClick = { onValueChange( (value - step).coerceIn(range.first, range.last) ) },
+            modifier = Modifier.size(40.dp).clip(CircleShape).background(NebulaPurple.copy(alpha = 0.2f))
         ) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease", tint = NebulaPurple) }
     }
 }
 
-private fun parseTimeString(timeString: String): Pair<Int, Int> { // Re-added
+private fun parseTimeString(timeString: String): Pair<Int, Int> {
     return try {
         val parts = timeString.split(":")
         Pair(parts[0].toInt(), parts[1].toInt())
-    } catch (e: Exception) { Pair(8, 0) }
+    } catch (e: Exception) { Pair(8, 0) } // Default to 8:00 AM on error
 }
 
-private fun formatTimeString(hour: Int, minute: Int): String { // Re-added
+private fun formatTimeString(hour: Int, minute: Int): String {
     return "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
 }
 
-private fun formatTimeDisplay(hour: Int, minute: Int): String { // Re-added
-    val amPm = if (hour < 12) "AM" else "PM"
+private fun formatTimeDisplay(hour: Int, minute: Int): String {
+    val amPm = if (hour < 12 || hour == 24) "AM" else "PM" // 24 is 12 AM
     val displayHour = when {
-        hour == 0 -> 12
+        hour == 0 || hour == 12 -> 12 // 00:xx is 12:xx AM, 12:xx is 12:xx PM
         hour > 12 -> hour - 12
         else -> hour
     }
