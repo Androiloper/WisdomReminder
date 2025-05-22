@@ -2,18 +2,7 @@ package com.example.wisdomreminder.ui.components
 
 import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
@@ -40,54 +29,44 @@ import com.example.wisdomreminder.ui.theme.StarWhite
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-// Define a height for the explorer's pager area
-private val EXPLORER_PAGER_HEIGHT = 340.dp // Consistent with SwipeableWisdomCards, adjust if needed
+private val EXPLORER_PAGER_HEIGHT = 340.dp
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CategoryExplorerCard(
     allWisdom: List<Wisdom>,
-    selectedCategory: String?, // Current filter from MainScreen state
-    allCategories: List<String>, // For the filter dropdown
+    selectedCategory: String?,
+    allCategories: List<String>,
     onWisdomClick: (Long) -> Unit,
-    onCategorySelected: (String?) -> Unit, // Callback when filter changes
+    onCategorySelected: (String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Filter wisdom based on the selectedCategory.
     val filteredWisdom = remember(allWisdom, selectedCategory) {
         if (selectedCategory != null && selectedCategory != "All Categories") {
             allWisdom.filter { it.category.equals(selectedCategory, ignoreCase = true) }
         } else {
-            allWisdom // Show all wisdom if "All Categories" or null is selected
+            allWisdom
         }
     }
 
     Log.d("CategoryExplorerCard", "Selected Category: $selectedCategory, Filtered Wisdom Count: ${filteredWisdom.size}")
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
+        modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Category Filter at the top
         CategoryFilter(
-            allCategories = allCategories, // Pass all available categories for the dropdown
-            selectedCategory = selectedCategory, // Current selection
-            onCategorySelected = onCategorySelected, // Callback to update selection in MainViewModel
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp) // Apply consistent padding
+            allCategories = allCategories,
+            selectedCategory = selectedCategory,
+            onCategorySelected = onCategorySelected,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
         if (filteredWisdom.isEmpty()) {
-            EmptyExplorerDisplay( // Use the updated empty state display
-                modifier = Modifier
-                    .height(EXPLORER_PAGER_HEIGHT)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp), // Consistent padding
+            EmptyExplorerDisplay(
+                modifier = Modifier.height(EXPLORER_PAGER_HEIGHT).fillMaxWidth().padding(horizontal = 16.dp),
                 selectedCategory = selectedCategory
             )
         } else {
@@ -96,134 +75,134 @@ fun CategoryExplorerCard(
                 pageCount = { filteredWisdom.size }
             )
 
-            // When the filter changes (selectedCategory) and thus filteredWisdom updates,
-            // reset the pager to the first page.
-            LaunchedEffect(selectedCategory, filteredWisdom.size) { // Keyed on selectedCategory and size
-                if (filteredWisdom.isNotEmpty()) {
-                    // If current page is invalid for new list, or if category changed, scroll to 0
-                    if (pagerState.currentPage >= filteredWisdom.size || (selectedCategory != pagerState.settledPage.toString() && pagerState.currentPage !=0) ) {
-                        Log.d("CategoryExplorerCard", "Filter changed or list size changed. Scrolling to page 0. Current Page: ${pagerState.currentPage}, New list size: ${filteredWisdom.size}")
-                        pagerState.scrollToPage(0)
+            // Effect to scroll to page 0 when the filtered list changes significantly (e.g. category changes)
+            // or if the current page becomes invalid.
+            LaunchedEffect(filteredWisdom) { // Keyed on the list itself
+                val newPageCount = filteredWisdom.size
+                if (newPageCount > 0) {
+                    if (pagerState.currentPage >= newPageCount || pagerState.currentPage != 0) { // If current page is invalid or not 0
+                        Log.d("CategoryExplorerCard", "Filtered wisdom changed or current page invalid. Scrolling to page 0. New size: $newPageCount, CurrentPage: ${pagerState.currentPage}")
+                        try {
+                            pagerState.scrollToPage(0)
+                        } catch (e: Exception) {
+                            Log.e("CategoryExplorerCard", "Error scrolling to page 0: ${e.message}")
+                        }
                     }
                 }
+                // If newPageCount is 0, Pager will handle it (no pages to show).
             }
+
 
             val coroutineScope = rememberCoroutineScope()
 
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(EXPLORER_PAGER_HEIGHT),
-                // Make cards wider by reducing horizontal contentPadding
-                contentPadding = PaddingValues(horizontal = 24.dp), // Allows glimpses, cards are wider
+                modifier = Modifier.fillMaxWidth().height(EXPLORER_PAGER_HEIGHT),
+                contentPadding = PaddingValues(horizontal = 24.dp),
                 pageSize = PageSize.Fill
             ) { pageIndex ->
-                if (pageIndex < filteredWisdom.size) { // Safety check
+                // Defensive check: Ensure pageIndex is valid for the current state of filteredWisdom
+                if (pageIndex < filteredWisdom.size) {
                     val wisdom = filteredWisdom[pageIndex]
-                    SingleWisdomDisplayCard( // Reusing the styled card
+                    SingleWisdomDisplayCard(
                         wisdom = wisdom,
                         onClick = { onWisdomClick(wisdom.id) },
                         modifier = Modifier
-                            .fillMaxSize() // Card fills the Pager item
-                            .graphicsLayer { // Optional: Page transition effects
-                                val pageOffset = pagerState.getOffsetFractionForPage(pageIndex)
-                                alpha = 1f - abs(pageOffset * 0.6f) // Slightly more aggressive fade for further items
-                                scaleX = 1f - abs(pageOffset * 0.20f) // Slightly more scaling
-                                scaleY = 1f - abs(pageOffset * 0.20f)
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                // **THE FIX IS HERE:** Add a guard before calling getOffsetFractionForPage
+                                if (pageIndex < pagerState.pageCount) {
+                                    val pageOffset = pagerState.getOffsetFractionForPage(pageIndex)
+                                    alpha = 1f - abs(pageOffset * 0.6f)
+                                    scaleX = 1f - abs(pageOffset * 0.20f)
+                                    scaleY = 1f - abs(pageOffset * 0.20f)
+                                } else {
+                                    // This page is temporarily out of bounds during recomposition,
+                                    // make it invisible or don't apply transforms.
+                                    alpha = 0f
+                                    Log.w("CategoryExplorerCard", "graphicsLayer: pageIndex $pageIndex is out of bounds for pageCount ${pagerState.pageCount}. Setting alpha to 0.")
+                                }
                             }
                     )
+                } else {
+                    Log.w("CategoryExplorerCard", "HorizontalPager content: pageIndex $pageIndex is out of bounds for filteredWisdom size ${filteredWisdom.size}. Rendering nothing for this index.")
+                    // Render an empty box or nothing if pageIndex is truly out of bounds
+                    // This state should be rare if pagerState.pageCount is updated correctly.
+                    Box(Modifier.fillMaxSize())
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Navigation Controls (Arrows and Page Indicator)
             if (filteredWisdom.size > 1) {
                 Row(
-                    Modifier
-                        .height(48.dp)
-                        .fillMaxWidth(),
+                    Modifier.height(48.dp).fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
                         onClick = {
                             coroutineScope.launch {
-                                val prevPage = (pagerState.currentPage - 1).coerceAtLeast(0)
-                                pagerState.animateScrollToPage(prevPage)
+                                if (pagerState.currentPage > 0) {
+                                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                                }
                             }
                         },
                         enabled = pagerState.currentPage > 0
                     ) {
-                        Icon(
-                            Icons.Default.KeyboardArrowLeft,
-                            contentDescription = "Previous Wisdom in Explorer",
-                            tint = if (pagerState.currentPage > 0) ElectricGreen else ElectricGreen.copy(alpha = 0.4f),
-                            modifier = Modifier.size(32.dp)
-                        )
+                        Icon(Icons.Default.KeyboardArrowLeft, "Previous Wisdom", tint = if (pagerState.currentPage > 0) ElectricGreen else ElectricGreen.copy(alpha = 0.4f), modifier = Modifier.size(32.dp))
                     }
-
-                    PageIndicator( // Reusing PageIndicator
-                        pageCount = filteredWisdom.size,
+                    PageIndicator(
+                        pageCount = filteredWisdom.size, // Use current filtered list size
                         currentPage = pagerState.currentPage,
                         modifier = Modifier.padding(horizontal = 16.dp),
                         selectedColor = NeonPink,
                         unselectedColor = StarWhite.copy(alpha = 0.5f)
                     )
-
                     IconButton(
                         onClick = {
                             coroutineScope.launch {
-                                val nextPage = (pagerState.currentPage + 1).coerceAtMost(filteredWisdom.size - 1)
-                                pagerState.animateScrollToPage(nextPage)
+                                if (pagerState.currentPage < filteredWisdom.size - 1) {
+                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                }
                             }
                         },
                         enabled = pagerState.currentPage < filteredWisdom.size - 1
                     ) {
-                        Icon(
-                            Icons.Default.KeyboardArrowRight,
-                            contentDescription = "Next Wisdom in Explorer",
-                            tint = if (pagerState.currentPage < filteredWisdom.size - 1) ElectricGreen else ElectricGreen.copy(alpha = 0.4f),
-                            modifier = Modifier.size(32.dp)
-                        )
+                        Icon(Icons.Default.KeyboardArrowRight, "Next Wisdom", tint = if (pagerState.currentPage < filteredWisdom.size - 1) ElectricGreen else ElectricGreen.copy(alpha = 0.4f), modifier = Modifier.size(32.dp))
                     }
                 }
             } else {
-                Spacer(modifier = Modifier.height(48.dp)) // Maintain layout space
+                Spacer(modifier = Modifier.height(48.dp))
             }
         }
     }
 }
 
 @Composable
-private fun EmptyExplorerDisplay( // Renamed from EmptyWisdomCard for clarity
+private fun EmptyExplorerDisplay(
     modifier: Modifier = Modifier,
     selectedCategory: String?
 ) {
     Box(
-        modifier = modifier
-            .padding(horizontal = 8.dp), // Match horizontal padding for consistency
+        modifier = modifier.padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Using SingleWisdomDisplayCard to show the empty message with consistent styling
         SingleWisdomDisplayCard(
             wisdom = Wisdom(
-                id = -1L, // Dummy ID for empty state
+                id = -1L,
                 text = if (selectedCategory != null && selectedCategory != "All Categories") {
-                    "No wisdom items found in the \"$selectedCategory\" category to explore."
+                    "No wisdom items found in the \"$selectedCategory\" category."
                 } else {
-                    "No wisdom items available to explore. Add some!"
+                    "No wisdom items available. Add some to explore!"
                 },
-                category = selectedCategory ?: "Info", // Use selected category or a generic one
+                category = selectedCategory ?: "Info",
                 source = ""
             ),
-            onClick = {}, // No action for the empty state card
-            modifier = Modifier.fillMaxSize() // Let the card fill the pager item slot
+            onClick = {},
+            modifier = Modifier.fillMaxSize()
         )
     }
 }
 
-// Ensure SingleWisdomDisplayCard, PageIndicator, and CategoryFilter composables
-// are accessible (e.g., in the same package 'ui.components' or imported).
-// These were defined/updated in previous steps.
+// Ensure SingleWisdomDisplayCard, PageIndicator, and CategoryFilter composables are correctly defined and imported.
