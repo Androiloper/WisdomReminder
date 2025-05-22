@@ -1,5 +1,6 @@
 package com.example.wisdomreminder.ui.components
 
+import android.util.Log // Import Log
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -14,9 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.PagerState
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -53,11 +51,21 @@ fun AllWisdomSection(
     onWisdomClick: (Long) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val localTag = "AllWisdomSection" // Tag for logging
 
     // State for pagination
     val pageSize = 7 // Show 7 items per page
-    val pages = max(1, (allWisdom.size + pageSize - 1) / pageSize) // Math.ceil equivalent
+    val pages = remember(allWisdom.size, pageSize) { // Recalculate if allWisdom.size or pageSize changes
+        max(1, (allWisdom.size + pageSize - 1) / pageSize)
+    }
     var currentPage by remember { mutableStateOf(0) }
+
+    // Ensure currentPage is valid if allWisdom list shrinks
+    if (currentPage >= pages) {
+        currentPage = max(0, pages - 1)
+    }
+
+    Log.d(localTag, "Total wisdom: ${allWisdom.size}, Page size: $pageSize, Total pages: $pages, Current page: $currentPage")
 
     Column(
         modifier = Modifier
@@ -82,13 +90,8 @@ fun AllWisdomSection(
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Navigation arrows and page counter
                     IconButton(
-                        onClick = {
-                            if (currentPage > 0) {
-                                currentPage--
-                            }
-                        },
+                        onClick = { if (currentPage > 0) currentPage-- },
                         enabled = currentPage > 0
                     ) {
                         Icon(
@@ -97,19 +100,13 @@ fun AllWisdomSection(
                             tint = if (currentPage > 0) ElectricGreen else ElectricGreen.copy(alpha = 0.3f)
                         )
                     }
-
                     Text(
                         text = "${currentPage + 1}/$pages",
                         style = MaterialTheme.typography.bodyMedium,
                         color = StarWhite
                     )
-
                     IconButton(
-                        onClick = {
-                            if (currentPage < pages - 1) {
-                                currentPage++
-                            }
-                        },
+                        onClick = { if (currentPage < pages - 1) currentPage++ },
                         enabled = currentPage < pages - 1
                     ) {
                         Icon(
@@ -122,47 +119,63 @@ fun AllWisdomSection(
             }
         }
 
+        Spacer(modifier = Modifier.height(8.dp)) // Add some space before the content area
+
         // Content for current page
         if (allWisdom.isEmpty()) {
-            // Empty state
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(300.dp)
+                    .height(300.dp) // Keep a defined height for empty state
                     .padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "No wisdom available",
+                    text = "No wisdom available to display.",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = StarWhite.copy(alpha = 0.7f)
+                    color = StarWhite.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center
                 )
             }
         } else {
-            // Calculate items for current page
             val startIndex = currentPage * pageSize
             val endIndex = minOf(startIndex + pageSize, allWisdom.size)
-            val pageItems = allWisdom.subList(startIndex, endIndex)
+            val pageItems = if (startIndex < endIndex) allWisdom.subList(startIndex, endIndex) else emptyList()
 
-            // Fixed height container
+            Log.d(localTag, "Page items for page ${currentPage + 1}: Count=${pageItems.size}, StartIndex=$startIndex, EndIndex=$endIndex")
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(480.dp)
+                    .height(480.dp) // Fixed height container for the list of items
             ) {
-                // Use a Column to display items
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Display each item in the current page
-                    pageItems.forEach { wisdom ->
-                        AllWisdomItem(
-                            wisdom = wisdom,
-                            onClick = { onWisdomClick(wisdom.id) }
-                        )
+                if (pageItems.isEmpty() && allWisdom.isNotEmpty()) {
+                    // This case should ideally not happen if pagination logic is correct and currentPage is valid
+                    Text(
+                        "Error: No items for current page, but wisdom exists.",
+                        color = NeonPink,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize() // Fills the 480.dp Box
+                            .padding(horizontal = 8.dp), // Padding for the list itself
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (pageItems.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("No wisdom on this page.", color = StarWhite.copy(alpha = 0.7f))
+                            }
+                        } else {
+                            pageItems.forEach { wisdom ->
+                                Log.d(localTag, "Displaying item: ID=${wisdom.id}, Text='${wisdom.text.take(30)}...'")
+                                AllWisdomItem(
+                                    wisdom = wisdom,
+                                    onClick = { onWisdomClick(wisdom.id) }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -185,10 +198,10 @@ fun AllWisdomItem(
                 .fillMaxWidth()
                 .padding(12.dp)
         ) {
-            // Status label
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically // Ensures badge and category are aligned
             ) {
                 Box(
                     modifier = Modifier
@@ -207,7 +220,7 @@ fun AllWisdomItem(
                             wisdom.isActive -> "ACTIVE"
                             wisdom.dateCompleted != null -> "COMPLETED"
                             else -> "QUEUED"
-                        },
+                        }.uppercase(), // Ensure consistent casing
                         style = MaterialTheme.typography.bodySmall,
                         color = when {
                             wisdom.isActive -> NeonPink
@@ -216,25 +229,25 @@ fun AllWisdomItem(
                         }
                     )
                 }
-
                 Text(
-                    text = wisdom.category,
+                    text = wisdom.category.ifEmpty { "General" }, // Provide a default if category is empty
                     style = MaterialTheme.typography.bodySmall,
                     color = StarWhite.copy(alpha = 0.7f)
                 )
             }
 
-            // Wisdom text
+            Spacer(modifier = Modifier.height(8.dp)) // Space after the header row
+
             Text(
-                text = wisdom.text,
+                text = wisdom.text.ifEmpty { "(No wisdom text)" }, // Placeholder for empty text
                 style = MaterialTheme.typography.bodyMedium,
                 color = StarWhite,
-                maxLines = 2,
-                modifier = Modifier.padding(vertical = 8.dp)
+                maxLines = 2, // Kept as 2 to manage item height
+                modifier = Modifier.padding(vertical = 4.dp) // Reduced vertical padding to tighten
             )
 
-            // Source if available
             if (wisdom.source.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp)) // Space before source
                 Text(
                     text = wisdom.source,
                     style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
@@ -243,6 +256,7 @@ fun AllWisdomItem(
                     modifier = Modifier.align(Alignment.End)
                 )
             }
+            // If there's no source, the item will be a bit shorter, which is fine.
         }
     }
 }

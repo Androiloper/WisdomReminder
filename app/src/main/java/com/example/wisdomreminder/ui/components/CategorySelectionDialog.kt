@@ -39,17 +39,13 @@ import com.example.wisdomreminder.ui.theme.StarWhite
  */
 @Composable
 fun CategorySelectionDialog(
-    availableCategories: List<String>,
-    selectedCategories: List<String>,
+    availableCategories: List<String>, // Categories that can be added (not already on dashboard)
+    allCategoriesInSystem: List<String>, // All unique categories from the database
+    selectedCategoriesOnDashboard: List<String>, // Categories currently on the dashboard
     onDismiss: () -> Unit,
     onCategorySelected: (String) -> Unit
 ) {
-    if (availableCategories.isEmpty()) {
-        return
-    }
-
-    // Track the selected category
-    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var categoryToAdd by remember { mutableStateOf<String?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -84,37 +80,37 @@ fun CategorySelectionDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Category list
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .fillMaxWidth()
                 ) {
-                    val filteredCategories = availableCategories.filter { it !in selectedCategories }
-
-                    if (filteredCategories.isEmpty()) {
+                    if (availableCategories.isEmpty()) {
                         item {
                             Text(
-                                text = "All categories have been added",
+                                text = if (allCategoriesInSystem.isEmpty()) {
+                                    "No categories defined in the app. Add wisdom with categories first."
+                                } else {
+                                    "All available categories are already on your dashboard."
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = StarWhite.copy(alpha = 0.6f),
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )
                         }
                     } else {
-                        items(filteredCategories) { category ->
+                        items(availableCategories) { category ->
                             CategoryItem(
                                 category = category,
-                                isSelected = category == selectedCategory,
-                                onSelect = { selectedCategory = category }
+                                isSelected = category == categoryToAdd,
+                                onSelect = { categoryToAdd = category }
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // Action buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End
@@ -130,13 +126,13 @@ fun CategorySelectionDialog(
 
                     Button(
                         onClick = {
-                            selectedCategory?.let { onCategorySelected(it) }
+                            categoryToAdd?.let { onCategorySelected(it) }
                             onDismiss()
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = NebulaPurple
                         ),
-                        enabled = selectedCategory != null,
+                        enabled = categoryToAdd != null,
                         modifier = Modifier.padding(start = 16.dp)
                     ) {
                         Text("ADD")
@@ -148,7 +144,7 @@ fun CategorySelectionDialog(
 }
 
 @Composable
-private fun CategoryItem(
+private fun CategoryItem( // This can remain private if only used here
     category: String,
     isSelected: Boolean,
     onSelect: () -> Unit

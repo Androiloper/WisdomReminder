@@ -162,7 +162,7 @@ fun CategoryWisdomCard(
                 } else {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.height(240.dp)
+                        modifier = Modifier.height(240.dp) // Fixed height for expanded list
                     ) {
                         items(
                             items = wisdomList,
@@ -176,7 +176,7 @@ fun CategoryWisdomCard(
                     }
                 }
             } else {
-                // Show just a preview
+                // Show just a preview (e.g., first item or a summary)
                 if (wisdomList.isEmpty()) {
                     Text(
                         text = "No wisdom in this category",
@@ -191,7 +191,7 @@ fun CategoryWisdomCard(
                         text = previewWisdom.text,
                         style = MaterialTheme.typography.bodyLarge,
                         color = StarWhite,
-                        maxLines = 2,
+                        maxLines = 2, // Show a couple of lines for preview
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
@@ -234,7 +234,7 @@ private fun CategoryWisdomItem(
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .clip(MaterialTheme.shapes.small)
-            .background(NebulaPurple.copy(alpha = 0.1f))
+            .background(NebulaPurple.copy(alpha = 0.1f)) // Subtle background for items
             .clickable(onClick = onClick)
             .padding(12.dp)
     ) {
@@ -243,7 +243,7 @@ private fun CategoryWisdomItem(
                 text = wisdom.text,
                 style = MaterialTheme.typography.bodyMedium,
                 color = StarWhite,
-                maxLines = 3,
+                maxLines = 3, // Allow a bit more text
                 overflow = TextOverflow.Ellipsis
             )
 
