@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,22 +21,31 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowBack // Keep for TopAppBar
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
+// Removed: import androidx.compose.material.icons.filled.ArrowDropDown
+// Removed: import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -48,10 +58,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -62,111 +73,173 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.painterResource // Ensure this is present
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.example.wisdomreminder.R
+import androidx.navigation.NavHostController
+import com.example.wisdomreminder.R // Ensure R is imported for drawables
 import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.ui.components.GlassCard
 import com.example.wisdomreminder.ui.main.MainViewModel
-import com.example.wisdomreminder.ui.theme.CosmicBlack
-import com.example.wisdomreminder.ui.theme.CyberBlue
-import com.example.wisdomreminder.ui.theme.DeepSpace
-import com.example.wisdomreminder.ui.theme.ElectricGreen
-import com.example.wisdomreminder.ui.theme.GlassSurface
-import com.example.wisdomreminder.ui.theme.GlassSurfaceDark
-import com.example.wisdomreminder.ui.theme.NebulaPurple
-import com.example.wisdomreminder.ui.theme.NeonPink
-import com.example.wisdomreminder.ui.theme.StarWhite
-import kotlinx.coroutines.flow.first
+import com.example.wisdomreminder.ui.navigation.Screen
+import com.example.wisdomreminder.ui.theme.*
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import java.time.format.DateTimeFormatter
-import androidx.compose.runtime.livedata.observeAsState
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun WisdomDetailScreen(
+    navController: NavHostController, // Added NavController
+    initialWisdomId: Long,
+    viewModel: MainViewModel,
+    onBackClick: () -> Unit
+) {
+    val mainUiState by viewModel.uiState.collectAsState()
+
+    // State to hold the list of wisdom items in the current category and the current index
+    val categoryWisdomData by produceState<Pair<List<Wisdom>, Int>?>(
+        initialValue = null,
+        key1 = initialWisdomId,
+        key2 = mainUiState
+    ) {
+        // This block will re-execute if initialWisdomId or mainUiState changes
+        val currentWisdom = when (val state = mainUiState) {
+            is MainViewModel.WisdomUiState.Success -> state.allWisdomFlatList.find { it.id == initialWisdomId }
+            else -> null
+        }
+
+        if (currentWisdom != null) {
+            val categoryItems = when (val state = mainUiState) {
+                is MainViewModel.WisdomUiState.Success -> state.allWisdomFlatList
+                    .filter { it.category.equals(currentWisdom.category, ignoreCase = true) }
+                    // Sort by orderIndex, then by dateCreated for consistent ordering
+                    .sortedWith(compareBy({ it.orderIndex }, { it.dateCreated }))
+                else -> emptyList()
+            }
+            val currentIndex = categoryItems.indexOfFirst { it.id == initialWisdomId }
+            if (currentIndex != -1) {
+                value = Pair(categoryItems, currentIndex)
+            } else {
+                value = Pair(listOf(currentWisdom), 0)
+            }
+        } else if (mainUiState is MainViewModel.WisdomUiState.Loading) {
+            value = null // Still loading
+        } else {
+            val errorWisdom = Wisdom(id = -1, text = "Wisdom not found or error loading.", category = "Error")
+            value = Pair(listOf(errorWisdom),0)
+        }
+    }
+
+
+    if (categoryWisdomData == null || mainUiState is MainViewModel.WisdomUiState.Loading) {
+        Box(modifier = Modifier.fillMaxSize().background(DeepSpace), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = ElectricGreen)
+        }
+        return
+    }
+
+    val (categoryWisdomList, initialPageIndex) = categoryWisdomData!!
+
+    if (categoryWisdomList.isEmpty() || initialPageIndex == -1) {
+        Box(modifier = Modifier.fillMaxSize().background(DeepSpace), contentAlignment = Alignment.Center) {
+            Text("Wisdom item not found in its category.", color = NeonPink, style = MaterialTheme.typography.bodyLarge)
+        }
+        return
+    }
+
+
+    val pagerState = rememberPagerState(
+        initialPage = initialPageIndex,
+        pageCount = { categoryWisdomList.size }
+    )
+
+    LaunchedEffect(pagerState, categoryWisdomList, initialWisdomId) {
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collectLatest { settledPage ->
+                if (categoryWisdomList.isNotEmpty() && settledPage < categoryWisdomList.size) {
+                    val newWisdomId = categoryWisdomList[settledPage].id
+                    if (newWisdomId != initialWisdomId) {
+                        navController.navigate(Screen.WisdomDetail.createRoute(newWisdomId)) {
+                            popUpTo(Screen.WisdomDetail.route) {
+                                inclusive = true
+                                saveState = false
+                            }
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    }
+                }
+            }
+    }
+
+    LaunchedEffect(initialWisdomId, categoryWisdomList.size) {
+        if (categoryWisdomList.isNotEmpty() && initialPageIndex != -1 && pagerState.currentPage != initialPageIndex && pagerState.pageCount == categoryWisdomList.size) {
+            pagerState.scrollToPage(initialPageIndex)
+        }
+    }
+
+
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier.fillMaxSize(),
+        key = { pageIndex -> categoryWisdomList[pageIndex].id }
+    ) { pageIndex ->
+        if (pageIndex >= 0 && pageIndex < categoryWisdomList.size) {
+            val currentWisdomInPager = categoryWisdomList[pageIndex]
+            WisdomItemDetailContent(
+                wisdom = currentWisdomInPager,
+                viewModel = viewModel,
+                onBackClick = onBackClick,
+                isFirstInCategory = pageIndex == 0,
+                isLastInCategory = pageIndex == categoryWisdomList.size - 1
+            )
+        } else {
+            Box(modifier = Modifier.fillMaxSize().background(DeepSpace), contentAlignment = Alignment.Center) {
+                Text("Error loading wisdom for this page.", color = NeonPink)
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WisdomDetailScreen(
+fun WisdomItemDetailContent(
+    wisdom: Wisdom,
+    viewModel: MainViewModel,
     onBackClick: () -> Unit,
-    wisdomId: Long,
-    viewModel: MainViewModel
+    isFirstInCategory: Boolean,
+    isLastInCategory: Boolean
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-
-    // CORRECTED: Construct allWisdom using the new specific lists from UiState.Success
-    val allWisdom = remember(uiState) {
-        when (val S = uiState) { // Use a different variable name to avoid conflict if needed
-            is MainViewModel.WisdomUiState.Success -> {
-                (S.activeWisdom +
-                        S.otherQueuedWisdom +
-                        S.favoriteQueuedWisdom +
-                        S.sevenWisdomPlaylist +
-                        S.completedWisdom
-                        ).distinctBy { it.id }
-            }
-            else -> emptyList()
-        }
-    }
-    val wisdom = remember(allWisdom, wisdomId) { // Find the wisdom from the correctly constructed list
-        allWisdom.find { it.id == wisdomId }
-    }
-
-    LaunchedEffect(wisdomId) {
-        // Fetch selected wisdom if not found or to ensure freshness,
-        // though 'allWisdom' should ideally contain it if already loaded by MainViewModel.
-        // This call ensures detail screen has the latest individual item state.
-        viewModel.getWisdomById(wisdomId)
-    }
-    // You might want to observe viewModel.selectedWisdom for the detail screen's primary display
-    // val displayedWisdom by viewModel.selectedWisdom.collectAsState()
-    // And then use 'displayedWisdom' instead of 'wisdom' found from 'allWisdom' for the UI.
-    // For now, using 'wisdom' derived from 'allWisdom' as per your original structure.
-
-
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
-    // Background with cosmic theme
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(DeepSpace)
             .drawBehind {
-                // Create a gradient background with stars
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            CosmicBlack,
-                            DeepSpace
-                        )
-                    )
-                )
-
-                // Small cosmic particles
+                drawRect(brush = Brush.verticalGradient(colors = listOf(CosmicBlack, DeepSpace)))
                 for (i in 0..100) {
                     val x = (Math.random() * size.width).toFloat()
                     val y = (Math.random() * size.height).toFloat()
                     val radius = (Math.random() * 2f + 0.5f).toFloat()
                     val alpha = (Math.random() * 0.8f + 0.2f).toFloat()
-
-                    drawCircle(
-                        color = StarWhite.copy(alpha = alpha),
-                        radius = radius,
-                        center = Offset(x, y)
-                    )
+                    drawCircle(color = StarWhite.copy(alpha = alpha), radius = radius, center = Offset(x, y))
                 }
             }
     ) {
-        // Nebula effect in the background
         Image(
             painter = painterResource(id = R.drawable.ic_wisdom),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .alpha(0.1f)
-                .blur(20.dp)
+            modifier = Modifier.fillMaxSize().alpha(0.1f).blur(20.dp)
         )
 
         Scaffold(
@@ -177,17 +250,15 @@ fun WisdomDetailScreen(
                 TopAppBar(
                     title = {
                         Text(
-                            wisdom?.category?.uppercase() ?: "WISDOM DETAIL",
-                            style = MaterialTheme.typography.headlineLarge
+                            wisdom.category.uppercase(),
+                            style = MaterialTheme.typography.headlineLarge,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
-                            Icon(
-                                imageVector = Icons.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = StarWhite
-                            )
+                            Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = StarWhite)
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -196,521 +267,201 @@ fun WisdomDetailScreen(
                         navigationIconContentColor = StarWhite
                     ),
                     actions = {
-                        // Edit action
                         IconButton(onClick = { showEditDialog = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit",
-                                tint = StarWhite
-                            )
+                            Icon(Icons.Default.Edit, contentDescription = "Edit", tint = StarWhite)
                         }
-
-                        // Delete action
                         IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Delete",
-                                tint = NeonPink
-                            )
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = NeonPink)
                         }
                     }
                 )
             },
             floatingActionButton = {
-                if (wisdom != null && !wisdom.isActive) {
+                if (!wisdom.isActive) {
                     FloatingActionButton(
                         onClick = { viewModel.activateWisdom(wisdom.id) },
                         containerColor = NebulaPurple,
                         contentColor = StarWhite
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Activate Wisdom"
-                        )
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Activate Wisdom")
                     }
                 }
             }
         ) { paddingValues ->
-            if (wisdom == null) {
-                // Wisdom not found
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .verticalScroll(scrollState)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        text = "Wisdom not found",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = StarWhite
-                    )
+                    val (statusColor, statusText) = when {
+                        wisdom.isActive -> NeonPink to "DAY ${wisdom.currentDay}/21"
+                        wisdom.dateCompleted != null -> CyberBlue to "COMPLETED"
+                        else -> NebulaPurple to "QUEUED"
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.small)
+                            .background(statusColor.copy(alpha = 0.2f))
+                            .padding(horizontal = 24.dp, vertical = 8.dp)
+                    ) {
+                        Text(text = statusText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = statusColor)
+                    }
                 }
-            } else {
-                // Wisdom detail
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues)
-                        .verticalScroll(scrollState)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Status badge
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        val (statusColor, statusText) = when {
-                            wisdom.isActive -> NeonPink to "DAY ${wisdom.currentDay}/21"
-                            wisdom.dateCompleted != null -> CyberBlue to "COMPLETED"
-                            else -> NebulaPurple to "QUEUED"
-                        }
 
-                        Box(
-                            modifier = Modifier
-                                .clip(MaterialTheme.shapes.small)
-                                .background(statusColor.copy(alpha = 0.2f))
-                                .padding(horizontal = 24.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = statusText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = statusColor
-                            )
-                        }
-                    }
-
-                    if (wisdom.isActive) {
-                        // Progress section for active wisdom
-                        GlassCard(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = "21/21 RULE PROGRESS",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = ElectricGreen
-                                )
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                // Progress indicators
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceEvenly
-                                ) {
-                                    // Day progress
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(80.dp)
-                                                .clip(CircleShape)
-                                                .background(GlassSurfaceDark),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(70.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        brush = Brush.radialGradient(
-                                                            colors = listOf(
-                                                                NeonPink.copy(alpha = 0.7f),
-                                                                NeonPink.copy(alpha = 0.1f)
-                                                            )
-                                                        )
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = "${wisdom.currentDay}",
-                                                    style = MaterialTheme.typography.displayMedium,
-                                                    color = StarWhite
-                                                )
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        Text(
-                                            text = "DAYS",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = NeonPink
-                                        )
-
-                                        Text(
-                                            text = "of 21",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = StarWhite.copy(alpha = 0.7f)
-                                        )
-                                    }
-
-                                    // Today's exposures
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(80.dp)
-                                                .clip(CircleShape)
-                                                .background(GlassSurfaceDark),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(70.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        brush = Brush.radialGradient(
-                                                            colors = listOf(
-                                                                ElectricGreen.copy(alpha = 0.7f),
-                                                                ElectricGreen.copy(alpha = 0.1f)
-                                                            )
-                                                        )
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = "${wisdom.exposuresToday}",
-                                                    style = MaterialTheme.typography.displayMedium,
-                                                    color = StarWhite
-                                                )
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        Text(
-                                            text = "TODAY",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = ElectricGreen
-                                        )
-
-                                        Text(
-                                            text = "of 21",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = StarWhite.copy(alpha = 0.7f)
-                                        )
-                                    }
-
-                                    // Total exposures
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(80.dp)
-                                                .clip(CircleShape)
-                                                .background(GlassSurfaceDark),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(70.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        brush = Brush.radialGradient(
-                                                            colors = listOf(
-                                                                CyberBlue.copy(alpha = 0.7f),
-                                                                CyberBlue.copy(alpha = 0.1f)
-                                                            )
-                                                        )
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = "${wisdom.exposuresTotal}",
-                                                    style = MaterialTheme.typography.displayMedium,
-                                                    color = StarWhite
-                                                )
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        Text(
-                                            text = "TOTAL",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = CyberBlue
-                                        )
-
-                                        Text(
-                                            text = "exposures",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = StarWhite.copy(alpha = 0.7f)
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(24.dp))
-
-                                // Daily exposures progress bar
-                                Text(
-                                    text = "Today's Exposures: ${wisdom.exposuresToday}/21",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = StarWhite.copy(alpha = 0.8f)
-                                )
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                val dailyProgress = (wisdom.exposuresToday.toFloat() / 21f).coerceIn(0f, 1f)
-                                androidx.compose.material3.LinearProgressIndicator(
-                                    progress =  dailyProgress ,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(8.dp),
-                                    color = ElectricGreen,
-                                    trackColor = GlassSurface.copy(alpha = 0.3f)
-                                )
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                // Days progress bar
-                                Text(
-                                    text = "Days Completed: ${wisdom.currentDay}/21",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = StarWhite.copy(alpha = 0.8f)
-                                )
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                val dayProgress = (wisdom.currentDay.toFloat() / 21f).coerceIn(0f, 1f)
-                                androidx.compose.material3.LinearProgressIndicator(
-                                    progress =  dayProgress ,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(8.dp),
-                                    color = NeonPink,
-                                    trackColor = GlassSurface.copy(alpha = 0.3f)
-                                )
-                            }
-                        }
-                    }
-
-                    // Wisdom content
-                    GlassCard(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                if (wisdom.isActive) {
+                    GlassCard(modifier = Modifier.fillMaxWidth()) {
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp)
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text(
-                                text = "WISDOM",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = NebulaPurple
-                            )
-
+                            Text("21/21 RULE PROGRESS", style = MaterialTheme.typography.titleMedium, color = ElectricGreen)
                             Spacer(modifier = Modifier.height(16.dp))
-
-                            Text(
-                                text = "\"${wisdom.text}\"",
-                                style = MaterialTheme.typography.headlineLarge,
-                                color = StarWhite,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            if (wisdom.source.isNotBlank()) {
-                                Text(
-                                    text = "— ${wisdom.source}",
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontStyle = FontStyle.Italic
-                                    ),
-                                    color = CyberBlue,
-                                    textAlign = TextAlign.End,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
-
-                    // Details card
-                    GlassCard(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp)
-                        ) {
-                            Text(
-                                text = "DETAILS",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = CyberBlue
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            val dateFormatter = DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' h:mm a")
-
-                            DetailRow(
-                                label = "Category",
-                                value = wisdom.category,
-                                labelColor = CyberBlue
-                            )
-
-                            DetailRow(
-                                label = "Created",
-                                value = wisdom.dateCreated.format(dateFormatter),
-                                labelColor = CyberBlue
-                            )
-
-                            if (wisdom.startDate != null) {
-                                DetailRow(
-                                    label = "Started",
-                                    value = wisdom.startDate.format(dateFormatter),
-                                    labelColor = CyberBlue
-                                )
-                            }
-
-                            if (wisdom.dateCompleted != null) {
-                                DetailRow(
-                                    label = "Completed",
-                                    value = wisdom.dateCompleted.format(dateFormatter),
-                                    labelColor = CyberBlue
-                                )
-                            }
-
-                            DetailRow(
-                                label = "Status",
-                                value = when {
-                                    wisdom.isActive -> "Active (Day ${wisdom.currentDay}/21)"
-                                    wisdom.dateCompleted != null -> "Completed"
-                                    else -> "Queued"
-                                },
-                                labelColor = CyberBlue
-                            )
-
-                            if (wisdom.isActive || wisdom.dateCompleted != null) {
-                                DetailRow(
-                                    label = "Total Exposures",
-                                    value = wisdom.exposuresTotal.toString(),
-                                    labelColor = CyberBlue
-                                )
-                            }
-                        }
-                    }
-
-                    // Actions card for non-active wisdom
-                    if (!wisdom.isActive) {
-                        GlassCard(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceEvenly
                             ) {
-                                Text(
-                                    text = "ACTIONS",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = ElectricGreen
-                                )
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                Button(
-                                    onClick = { viewModel.activateWisdom(wisdom.id) },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = NebulaPurple
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-
-                                    Spacer(modifier = Modifier.width(8.dp))
-
-                                    Text(
-                                        text = if (wisdom.dateCompleted != null) "REACTIVATE" else "ACTIVATE",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                Text(
-                                    text = "Activating this wisdom will begin the 21/21 rule process.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = StarWhite.copy(alpha = 0.7f),
-                                    textAlign = TextAlign.Center
-                                )
+                                ProgressCircle("DAYS", wisdom.currentDay.toString(), NeonPink)
+                                ProgressCircle("TODAY", wisdom.exposuresToday.toString(), ElectricGreen)
+                                ProgressCircle("TOTAL", wisdom.exposuresTotal.toString(), CyberBlue, "exposures")
                             }
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Text("Today's Exposures: ${wisdom.exposuresToday}/21", style = MaterialTheme.typography.bodySmall, color = StarWhite.copy(alpha = 0.8f))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress =  (wisdom.exposuresToday.toFloat() / 21f).coerceIn(0f, 1f) ,
+                                modifier = Modifier.fillMaxWidth().height(8.dp),
+                                color = ElectricGreen,
+                                trackColor = GlassSurface.copy(alpha = 0.3f)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Days Completed: ${wisdom.currentDay}/21", style = MaterialTheme.typography.bodySmall, color = StarWhite.copy(alpha = 0.8f))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress =  (wisdom.currentDay.toFloat() / 21f).coerceIn(0f, 1f) ,
+                                modifier = Modifier.fillMaxWidth().height(8.dp),
+                                color = NeonPink,
+                                trackColor = GlassSurface.copy(alpha = 0.3f)
+                            )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(80.dp)) // Bottom spacing for FAB
                 }
 
-                // Edit dialog
-                if (showEditDialog) {
-                    EditWisdomDialog(
-                        wisdom = wisdom,
-                        onDismiss = { showEditDialog = false },
-                        onSave = { text, source, category ->
-                            viewModel.updateWisdom(
-                                wisdom.copy(
-                                    text = text,
-                                    source = source,
-                                    category = category
-                                )
-                            )
-                            showEditDialog = false
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+                        Text("WISDOM", style = MaterialTheme.typography.titleMedium, color = NebulaPurple)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("\"${wisdom.text}\"", style = MaterialTheme.typography.headlineLarge, color = StarWhite, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                        Spacer(modifier = Modifier.height(16.dp))
+                        if (wisdom.source.isNotBlank()) {
+                            Text("— ${wisdom.source}", style = MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic), color = CyberBlue, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
                         }
-                    )
+                    }
                 }
 
-                // Delete confirmation dialog
-                if (showDeleteDialog) {
-                    AlertDialog(
-                        onDismissRequest = { showDeleteDialog = false },
-                        title = {
-                            Text("Delete Wisdom")
-                        },
-                        text = {
-                            Text("Are you sure you want to delete this wisdom? This action cannot be undone.")
-                        },
-                        confirmButton = {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
+                        Text("DETAILS", style = MaterialTheme.typography.titleMedium, color = CyberBlue)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        // Corrected DateTimeFormatter pattern
+                        val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' h:mm a") }
+                        DetailRow("Category", wisdom.category, CyberBlue)
+                        DetailRow("Created", wisdom.dateCreated.format(dateFormatter), CyberBlue)
+                        wisdom.startDate?.let { DetailRow("Started", it.format(dateFormatter), CyberBlue) }
+                        wisdom.dateCompleted?.let { DetailRow("Completed", it.format(dateFormatter), CyberBlue) }
+                        DetailRow("Status", when {
+                            wisdom.isActive -> "Active (Day ${wisdom.currentDay}/21)"
+                            wisdom.dateCompleted != null -> "Completed"
+                            else -> "Queued"
+                        }, CyberBlue)
+                        if (wisdom.isActive || wisdom.dateCompleted != null) {
+                            DetailRow("Total Exposures", wisdom.exposuresTotal.toString(), CyberBlue)
+                        }
+                    }
+                }
+
+                if (!wisdom.isActive) {
+                    GlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("ACTIONS", style = MaterialTheme.typography.titleMedium, color = ElectricGreen)
+                            Spacer(modifier = Modifier.height(16.dp))
                             Button(
-                                onClick = {
-                                    viewModel.deleteWisdom(wisdom)
-                                    showDeleteDialog = false
-                                    onBackClick()
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = NeonPink
-                                )
+                                onClick = { viewModel.activateWisdom(wisdom.id) },
+                                colors = ButtonDefaults.buttonColors(containerColor = NebulaPurple),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("DELETE")
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(if (wisdom.dateCompleted != null) "REACTIVATE" else "ACTIVATE", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                             }
-                        },
-                        dismissButton = {
-                            TextButton(
-                                onClick = { showDeleteDialog = false }
-                            ) {
-                                Text("CANCEL")
-                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Activating this wisdom will begin the 21/21 rule process.", style = MaterialTheme.typography.bodySmall, color = StarWhite.copy(alpha = 0.7f), textAlign = TextAlign.Center)
                         }
-                    )
+                    }
                 }
+                Spacer(modifier = Modifier.height(80.dp))
             }
+
+            if (showEditDialog) {
+                EditWisdomDialog(
+                    wisdom = wisdom,
+                    onDismiss = { showEditDialog = false },
+                    onSave = { text, source, category ->
+                        viewModel.updateWisdom(wisdom.copy(text = text, source = source, category = category))
+                        showEditDialog = false
+                    }
+                )
+            }
+
+            if (showDeleteDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteDialog = false },
+                    title = { Text("Delete Wisdom") },
+                    text = { Text("Are you sure you want to delete this wisdom? This action cannot be undone.") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.deleteWisdom(wisdom)
+                                showDeleteDialog = false
+                                onBackClick()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonPink)
+                        ) { Text("DELETE") }
+                    },
+                    dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("CANCEL") } }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgressCircle(label: String, value: String, color: Color, subLabel: String = "of 21") {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier.size(80.dp).clip(CircleShape).background(GlassSurfaceDark),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier.size(70.dp).clip(CircleShape)
+                    .background(brush = Brush.radialGradient(colors = listOf(color.copy(alpha = 0.7f), color.copy(alpha = 0.1f)))),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(value, style = MaterialTheme.typography.displayMedium, color = StarWhite)
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = color)
+        if (label != "TOTAL") {
+            Text(subLabel, style = MaterialTheme.typography.bodySmall, color = StarWhite.copy(alpha = 0.7f))
+        } else {
+            Text(subLabel, style = MaterialTheme.typography.bodySmall, color = StarWhite.copy(alpha = 0.7f))
         }
     }
 }
@@ -732,7 +483,6 @@ fun DetailRow(
             style = MaterialTheme.typography.bodyMedium,
             color = labelColor
         )
-
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
@@ -751,42 +501,25 @@ fun EditWisdomDialog(
     var wisdomText by remember { mutableStateOf(wisdom.text) }
     var wisdomSource by remember { mutableStateOf(wisdom.source) }
     var wisdomCategory by remember { mutableStateOf(wisdom.category) }
-
-    // Available categories
     val categories = listOf("General", "Personal", "Professional", "Health", "Relationships", "Philosophy", "Motivation")
     var showCategoryDropdown by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            colors = androidx.compose.material3.CardDefaults.cardColors(
-                containerColor = GlassSurface,
-                contentColor = StarWhite
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = GlassSurface, contentColor = StarWhite),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
             shape = MaterialTheme.shapes.large
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
+                modifier = Modifier.fillMaxWidth().padding(24.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "EDIT WISDOM",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = CyberBlue
-                )
-
-                // Wisdom text field
+                Text("EDIT WISDOM", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = CyberBlue)
                 OutlinedTextField(
                     value = wisdomText,
                     onValueChange = { wisdomText = it },
                     label = { Text("Wisdom Text") },
-                    placeholder = { Text("Enter your wisdom") },
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = CyberBlue,
@@ -799,13 +532,10 @@ fun EditWisdomDialog(
                     ),
                     minLines = 3
                 )
-
-                // Source field
                 OutlinedTextField(
                     value = wisdomSource,
                     onValueChange = { wisdomSource = it },
                     label = { Text("Source (Optional)") },
-                    placeholder = { Text("Author, book, etc.") },
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = CyberBlue,
@@ -818,11 +548,7 @@ fun EditWisdomDialog(
                     ),
                     singleLine = true
                 )
-
-                // Category field with dropdown
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = wisdomCategory,
                         onValueChange = { wisdomCategory = it },
@@ -840,98 +566,38 @@ fun EditWisdomDialog(
                         singleLine = true,
                         readOnly = true,
                         trailingIcon = {
-                            TextButton(onClick = { showCategoryDropdown = !showCategoryDropdown }) {
-                                Text(
-                                    text = if (showCategoryDropdown) "Close" else "Select",
-                                    color = CyberBlue
+                            IconButton(onClick = { showCategoryDropdown = !showCategoryDropdown }) {
+                                Icon(
+                                    painter = if (showCategoryDropdown) painterResource(id = R.drawable.ic_arrow_drop_up) else painterResource(id = R.drawable.ic_arrow_drop_down),
+                                    contentDescription = "Toggle Categories",
+                                    tint = CyberBlue
                                 )
                             }
                         }
                     )
-
-                    // Category dropdown
-                    if (showCategoryDropdown) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp)
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
-                                .background(GlassSurface.copy(alpha = 0.8f))
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp)
-                            ) {
-                                categories.forEach { category ->
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
-                                            .background(
-                                                if (category == wisdomCategory)
-                                                    CyberBlue.copy(alpha = 0.2f)
-                                                else
-                                                    Color.Transparent
-                                            )
-                                            .padding(12.dp),
-                                        contentAlignment = Alignment.CenterStart
-                                    ) {
-                                        TextButton(
-                                            onClick = {
-                                                wisdomCategory = category
-                                                showCategoryDropdown = false
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Text(
-                                                text = category,
-                                                color = if (category == wisdomCategory)
-                                                    CyberBlue
-                                                else
-                                                    StarWhite,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        }
-                                    }
+                    DropdownMenu(
+                        expanded = showCategoryDropdown,
+                        onDismissRequest = { showCategoryDropdown = false },
+                        modifier = Modifier.fillMaxWidth(0.8f).background(GlassSurfaceDark.copy(alpha = 0.95f))
+                    ) {
+                        categories.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category, color = if (category == wisdomCategory) CyberBlue else StarWhite) },
+                                onClick = {
+                                    wisdomCategory = category
+                                    showCategoryDropdown = false
                                 }
-                            }
+                            )
                         }
                     }
                 }
-
-                // Action buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Color.Gray.copy(alpha = 0.5f)), modifier = Modifier.padding(end = 16.dp)) { Text("CANCEL") }
                     Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Gray.copy(alpha = 0.5f)
-                        ),
-                        modifier = Modifier.padding(end = 16.dp)
-                    ) {
-                        Text("CANCEL")
-                    }
-
-                    Button(
-                        onClick = {
-                            if (wisdomText.isNotBlank()) {
-                                onSave(
-                                    wisdomText.trim(),
-                                    wisdomSource.trim(),
-                                    wisdomCategory.trim()
-                                )
-                            }
-                        },
+                        onClick = { if (wisdomText.isNotBlank()) onSave(wisdomText.trim(), wisdomSource.trim(), wisdomCategory.trim()) },
                         enabled = wisdomText.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = CyberBlue
-                        )
-                    ) {
-                        Text("UPDATE")
-                    }
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberBlue)
+                    ) { Text("UPDATE") }
                 }
             }
         }

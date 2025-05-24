@@ -95,14 +95,15 @@ fun AppNavigation(
         composable(
             route = Screen.WisdomDetail.route,
             arguments = listOf(
-                navArgument("wisdomId") { type = NavType.LongType }
+                navArgument("wisdomId") { type = NavType.LongType } // This is the argument name from the route
             )
         ) { backStackEntry ->
-            val wisdomId = backStackEntry.arguments?.getLong("wisdomId") ?: -1L
+            val wisdomIdArg = backStackEntry.arguments?.getLong("wisdomId") ?: -1L // Extracted argument
             WisdomDetailScreen(
-                onBackClick = { navController.popBackStack() },
-                wisdomId = wisdomId,
-                viewModel = mainViewModel
+                navController = navController, // Passed navController
+                initialWisdomId = wisdomIdArg,  // Corrected parameter name
+                viewModel = mainViewModel,
+                onBackClick = { navController.popBackStack() }
             )
         }
 
