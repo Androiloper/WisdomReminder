@@ -66,7 +66,8 @@ fun CategoryExplorerCard(
 
         if (filteredWisdom.isEmpty()) {
             EmptyExplorerDisplay(
-                modifier = Modifier.height(EXPLORER_PAGER_HEIGHT).fillMaxWidth().padding(horizontal = 16.dp),
+                modifier = Modifier.height(EXPLORER_PAGER_HEIGHT).fillMaxWidth()
+                    .padding(horizontal = 16.dp),
                 selectedCategory = selectedCategory
             )
         } else {
@@ -75,12 +76,10 @@ fun CategoryExplorerCard(
                 pageCount = { filteredWisdom.size }
             )
 
-            // Effect to scroll to page 0 when the filtered list changes significantly (e.g. category changes)
-            // or if the current page becomes invalid.
-            LaunchedEffect(filteredWisdom) { // Keyed on the list itself
+            LaunchedEffect(filteredWisdom) {
                 val newPageCount = filteredWisdom.size
                 if (newPageCount > 0) {
-                    if (pagerState.currentPage >= newPageCount || pagerState.currentPage != 0) { // If current page is invalid or not 0
+                    if (pagerState.currentPage >= newPageCount || pagerState.currentPage != 0) {
                         Log.d("CategoryExplorerCard", "Filtered wisdom changed or current page invalid. Scrolling to page 0. New size: $newPageCount, CurrentPage: ${pagerState.currentPage}")
                         try {
                             pagerState.scrollToPage(0)
@@ -89,7 +88,6 @@ fun CategoryExplorerCard(
                         }
                     }
                 }
-                // If newPageCount is 0, Pager will handle it (no pages to show).
             }
 
 
@@ -98,10 +96,9 @@ fun CategoryExplorerCard(
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxWidth().height(EXPLORER_PAGER_HEIGHT),
-                contentPadding = PaddingValues(horizontal = 24.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp), // Changed to 0.dp for full width
                 pageSize = PageSize.Fill
             ) { pageIndex ->
-                // Defensive check: Ensure pageIndex is valid for the current state of filteredWisdom
                 if (pageIndex < filteredWisdom.size) {
                     val wisdom = filteredWisdom[pageIndex]
                     SingleWisdomDisplayCard(
@@ -110,15 +107,12 @@ fun CategoryExplorerCard(
                         modifier = Modifier
                             .fillMaxSize()
                             .graphicsLayer {
-                                // **THE FIX IS HERE:** Add a guard before calling getOffsetFractionForPage
                                 if (pageIndex < pagerState.pageCount) {
                                     val pageOffset = pagerState.getOffsetFractionForPage(pageIndex)
-                                    alpha = 1f - abs(pageOffset * 0.6f)
-                                    scaleX = 1f - abs(pageOffset * 0.20f)
-                                    scaleY = 1f - abs(pageOffset * 0.20f)
+                                    alpha = 1f - abs(pageOffset * 0.3f)
+                                    scaleX = 1f - abs(pageOffset * 0.1f)
+                                    scaleY = 1f - abs(pageOffset * 0.1f)
                                 } else {
-                                    // This page is temporarily out of bounds during recomposition,
-                                    // make it invisible or don't apply transforms.
                                     alpha = 0f
                                     Log.w("CategoryExplorerCard", "graphicsLayer: pageIndex $pageIndex is out of bounds for pageCount ${pagerState.pageCount}. Setting alpha to 0.")
                                 }
@@ -126,8 +120,6 @@ fun CategoryExplorerCard(
                     )
                 } else {
                     Log.w("CategoryExplorerCard", "HorizontalPager content: pageIndex $pageIndex is out of bounds for filteredWisdom size ${filteredWisdom.size}. Rendering nothing for this index.")
-                    // Render an empty box or nothing if pageIndex is truly out of bounds
-                    // This state should be rare if pagerState.pageCount is updated correctly.
                     Box(Modifier.fillMaxSize())
                 }
             }
@@ -153,7 +145,7 @@ fun CategoryExplorerCard(
                         Icon(Icons.Default.KeyboardArrowLeft, "Previous Wisdom", tint = if (pagerState.currentPage > 0) ElectricGreen else ElectricGreen.copy(alpha = 0.4f), modifier = Modifier.size(32.dp))
                     }
                     PageIndicator(
-                        pageCount = filteredWisdom.size, // Use current filtered list size
+                        pageCount = filteredWisdom.size,
                         currentPage = pagerState.currentPage,
                         modifier = Modifier.padding(horizontal = 16.dp),
                         selectedColor = NeonPink,
@@ -185,7 +177,7 @@ private fun EmptyExplorerDisplay(
     selectedCategory: String?
 ) {
     Box(
-        modifier = modifier.padding(horizontal = 8.dp),
+        modifier = modifier,
         contentAlignment = Alignment.Center
     ) {
         SingleWisdomDisplayCard(
@@ -204,5 +196,3 @@ private fun EmptyExplorerDisplay(
         )
     }
 }
-
-// Ensure SingleWisdomDisplayCard, PageIndicator, and CategoryFilter composables are correctly defined and imported.
