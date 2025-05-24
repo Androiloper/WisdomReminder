@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -30,12 +31,56 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.wisdomreminder.R
 import com.example.wisdomreminder.model.Wisdom
-import com.example.wisdomreminder.ui.components.*
-import com.example.wisdomreminder.ui.theme.*
+import com.example.wisdomreminder.ui.components.* import com.example.wisdomreminder.ui.theme.*
 import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.foundation.horizontalScroll
+
+
+// Definition for NavButtonInfo and HorizontalNavButtons (can be moved to a components file)
+data class NavButtonInfo(
+    val label: String,
+    val onClick: () -> Unit,
+    val color: Color
+)
+
+@Composable
+fun HorizontalNavButtons(
+    buttons: List<NavButtonInfo>,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .background(Color.Transparent)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        buttons.forEach { buttonInfo ->
+            GlassCard(
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.medium)
+                    .clickable(onClick = buttonInfo.onClick)
+                    .defaultMinSize(minHeight = 42.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = buttonInfo.label.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = buttonInfo.color
+                    )
+                }
+            }
+        }
+    }
+}
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,7 +97,7 @@ fun MainScreen(
     var showAddWisdomDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     val localTAG = "MainScreen"
-    var showCategorySelectionDialog by remember { mutableStateOf(false) } // State for dialog visibility
+    var showCategorySelectionDialog by remember { mutableStateOf(false) }
 
 
     LaunchedEffect(Unit) {
@@ -173,7 +218,7 @@ fun MainScreen(
                                 NavButtonInfo("WISDOM", onClick = { onNavigateToWisdomList("all") }, color = CyberBlue),
                                 NavButtonInfo("CATEGORY", onClick = onNavigateToManageCategories, color = ElectricGreen),
                                 NavButtonInfo("QUEUE", onClick = { onNavigateToWisdomList("queued") }, color = NeonPink),
-                                NavButtonInfo("DASHBOARD+", onClick = { showCategorySelectionDialog = true }, color = AccentOrange) // New button
+                                NavButtonInfo("DASHBOARD+", onClick = { showCategorySelectionDialog = true }, color = AccentOrange)
                             )
                         )
 
@@ -256,7 +301,6 @@ fun MainScreen(
                                 }
                             }
 
-                            // The old "ADD CATEGORY TO DASHBOARD" button is now removed from here.
 
                             if (state.activeWisdom.isNotEmpty()) {
                                 Text(
@@ -282,12 +326,13 @@ fun MainScreen(
                                 }
                             }
 
-                            if (allWisdomItems.isNotEmpty()) {
-                                AllWisdomSection(
-                                    allWisdom = allWisdomItems,
-                                    onWisdomClick = onWisdomClick
-                                )
-                            }
+                            // Entire AllWisdomSection call is removed
+                            // if (allWisdomItems.isNotEmpty()) {
+                            // AllWisdomSection(
+                            // allWisdom = allWisdomItems,
+                            // onWisdomClick = onWisdomClick
+                            // )
+                            // }
 
                             if (allWisdomItems.isEmpty() && state.activeWisdom.isEmpty()) {
                                 Button(
@@ -295,14 +340,6 @@ fun MainScreen(
                                     colors = ButtonDefaults.buttonColors(containerColor = NeonPink),
                                     modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 16.dp)
                                 ) { Text("ADD SAMPLE WISDOM") }
-                            }
-
-                            Button(
-                                onClick = { viewModel.debugDatabaseContents() },
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentOrange),
-                                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)
-                            ) {
-                                Text("DEBUG DB")
                             }
 
                             Spacer(modifier = Modifier.height(80.dp))
@@ -320,7 +357,6 @@ fun MainScreen(
                         }
                     )
                 }
-                // This dialog is now triggered by the "DASHBOARD+" button in HorizontalNavButtons
                 if (showCategorySelectionDialog) {
                     val availableCategoriesForDialog = state.allCategories.filterNot { it in state.selectedCategoriesForCards }
                     val allCategoriesFromState = state.allCategories

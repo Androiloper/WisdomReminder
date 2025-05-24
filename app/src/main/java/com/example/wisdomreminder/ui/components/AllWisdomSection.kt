@@ -33,10 +33,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.ui.theme.CyberBlue
 import com.example.wisdomreminder.ui.theme.ElectricGreen
+import com.example.wisdomreminder.ui.theme.GlassSurface
 import com.example.wisdomreminder.ui.theme.NebulaPurple
 import com.example.wisdomreminder.ui.theme.NeonPink
 import com.example.wisdomreminder.ui.theme.StarWhite
@@ -51,16 +53,14 @@ fun AllWisdomSection(
     onWisdomClick: (Long) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val localTag = "AllWisdomSection" // Tag for logging
+    val localTag = "AllWisdomSection"
 
-    // State for pagination
-    val pageSize = 7 // Show 7 items per page
-    val pages = remember(allWisdom.size, pageSize) { // Recalculate if allWisdom.size or pageSize changes
+    val pageSize = 7
+    val pages = remember(allWisdom.size, pageSize) {
         max(1, (allWisdom.size + pageSize - 1) / pageSize)
     }
     var currentPage by remember { mutableStateOf(0) }
 
-    // Ensure currentPage is valid if allWisdom list shrinks
     if (currentPage >= pages) {
         currentPage = max(0, pages - 1)
     }
@@ -73,20 +73,16 @@ fun AllWisdomSection(
             .padding(vertical = 8.dp)
     ) {
         // Section header with page indicator
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "ALL WISDOM",
-                style = MaterialTheme.typography.titleLarge,
-                color = NeonPink
-            )
-
-            if (pages > 1) {
+        if (pages > 1) { // Only show pagination controls if there's more than one page
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp), // Added vertical padding
+                horizontalArrangement = Arrangement.End, // Changed to End as title is removed
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // "ALL WISDOM" Text removed from here
+                // Pagination controls
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -117,16 +113,20 @@ fun AllWisdomSection(
                     }
                 }
             }
+        } else {
+            // If only one page or no items, provide a small spacer or nothing,
+            // as the pagination controls and title are not needed.
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
-        Spacer(modifier = Modifier.height(8.dp)) // Add some space before the content area
 
-        // Content for current page
+        Spacer(modifier = Modifier.height(8.dp))
+
         if (allWisdom.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(300.dp) // Keep a defined height for empty state
+                    .height(300.dp)
                     .padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -147,10 +147,9 @@ fun AllWisdomSection(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(480.dp) // Fixed height container for the list of items
+                    .height(480.dp)
             ) {
                 if (pageItems.isEmpty() && allWisdom.isNotEmpty()) {
-                    // This case should ideally not happen if pagination logic is correct and currentPage is valid
                     Text(
                         "Error: No items for current page, but wisdom exists.",
                         color = NeonPink,
@@ -159,8 +158,8 @@ fun AllWisdomSection(
                 } else {
                     Column(
                         modifier = Modifier
-                            .fillMaxSize() // Fills the 480.dp Box
-                            .padding(horizontal = 8.dp), // Padding for the list itself
+                            .fillMaxSize()
+                            .padding(horizontal = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         if (pageItems.isEmpty()) {
@@ -201,7 +200,7 @@ fun AllWisdomItem(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically // Ensures badge and category are aligned
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
@@ -220,7 +219,7 @@ fun AllWisdomItem(
                             wisdom.isActive -> "ACTIVE"
                             wisdom.dateCompleted != null -> "COMPLETED"
                             else -> "QUEUED"
-                        }.uppercase(), // Ensure consistent casing
+                        }.uppercase(),
                         style = MaterialTheme.typography.bodySmall,
                         color = when {
                             wisdom.isActive -> NeonPink
@@ -230,33 +229,34 @@ fun AllWisdomItem(
                     )
                 }
                 Text(
-                    text = wisdom.category.ifEmpty { "General" }, // Provide a default if category is empty
+                    text = wisdom.category.ifEmpty { "General" },
                     style = MaterialTheme.typography.bodySmall,
                     color = StarWhite.copy(alpha = 0.7f)
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp)) // Space after the header row
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = wisdom.text.ifEmpty { "(No wisdom text)" }, // Placeholder for empty text
+                text = wisdom.text.ifEmpty { "(No wisdom text)" },
                 style = MaterialTheme.typography.bodyMedium,
                 color = StarWhite,
-                maxLines = 2, // Kept as 2 to manage item height
-                modifier = Modifier.padding(vertical = 4.dp) // Reduced vertical padding to tighten
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(vertical = 4.dp)
             )
 
             if (wisdom.source.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp)) // Space before source
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = wisdom.source,
                     style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
                     color = CyberBlue,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.align(Alignment.End)
                 )
             }
-            // If there's no source, the item will be a bit shorter, which is fine.
         }
     }
 }
