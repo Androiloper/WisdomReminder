@@ -6,32 +6,43 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-
 import androidx.compose.material.icons.filled.ArrowBack
-
+import androidx.compose.material.icons.filled.Clear // For clearing search
 import androidx.compose.material.icons.filled.Edit
-
+import androidx.compose.material.icons.filled.Search // For search icon
+// Removed: import androidx.compose.material.icons.filled.AccessTime // Using painterResource now
+// Removed: import androidx.compose.material.icons.filled.SortByAlpha // Will use painterResource for ic_sort_by_alpha
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.painterResource // Added for painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import android.widget.Toast
-import androidx.navigation.NavHostController // Import NavController
-import com.example.wisdomreminder.R
+import androidx.navigation.NavHostController
+import com.example.wisdomreminder.R // Ensure R is imported for drawables
+import com.example.wisdomreminder.model.Wisdom // Import Wisdom model
 import com.example.wisdomreminder.ui.components.GlassCard
 import com.example.wisdomreminder.ui.main.MainViewModel
-import com.example.wisdomreminder.ui.navigation.Screen // Import Screen for navigation routes
+import com.example.wisdomreminder.ui.navigation.Screen
 import com.example.wisdomreminder.ui.theme.*
+import java.time.LocalDateTime
+
+// Updated Enum for Sort Order
+enum class CategorySortOrder {
+    ALPHABETICAL_ASC,
+    ALPHABETICAL_DESC,
+    NEWEST_WISDOM_FIRST, // Categories with newest wisdom items first
+    OLDEST_WISDOM_FIRST  // Categories with oldest wisdom items first
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManageCategoriesScreen(
-    navController: NavHostController, // Added NavController
+    navController: NavHostController,
     viewModel: MainViewModel,
     onBackClick: () -> Unit
 ) {
@@ -40,6 +51,9 @@ fun ManageCategoriesScreen(
 
     var categoryToRename by remember { mutableStateOf<String?>(null) }
     var categoryToClear by remember { mutableStateOf<String?>(null) }
+
+    var searchQuery by remember { mutableStateOf("") }
+    var sortOrder by remember { mutableStateOf(CategorySortOrder.ALPHABETICAL_ASC) } // Default sort
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -63,7 +77,6 @@ fun ManageCategoriesScreen(
         }
     }
 
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -86,27 +99,137 @@ fun ManageCategoriesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
         ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                label = { Text("Search Categories", color = StarWhite.copy(alpha = 0.7f)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search", tint = StarWhite.copy(alpha = 0.7f)) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear Search", tint = StarWhite.copy(alpha = 0.7f))
+                        }
+                    }
+                },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = CyberBlue,
+                    unfocusedBorderColor = StarWhite.copy(alpha = 0.5f),
+                    focusedTextColor = StarWhite,
+                    unfocusedTextColor = StarWhite,
+                    cursorColor = CyberBlue,
+                    focusedLabelColor = CyberBlue,
+                    unfocusedLabelColor = StarWhite.copy(alpha = 0.7f),
+                    focusedContainerColor = GlassSurface.copy(alpha = 0.3f),
+                    unfocusedContainerColor = GlassSurface.copy(alpha = 0.2f),
+                ),
+                shape = MaterialTheme.shapes.medium
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Sort by:", style = MaterialTheme.typography.bodyMedium, color = StarWhite.copy(alpha = 0.8f))
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(onClick = {
+                    sortOrder = when (sortOrder) {
+                        CategorySortOrder.ALPHABETICAL_ASC -> CategorySortOrder.ALPHABETICAL_DESC
+                        CategorySortOrder.ALPHABETICAL_DESC -> CategorySortOrder.NEWEST_WISDOM_FIRST
+                        CategorySortOrder.NEWEST_WISDOM_FIRST -> CategorySortOrder.OLDEST_WISDOM_FIRST
+                        CategorySortOrder.OLDEST_WISDOM_FIRST -> CategorySortOrder.ALPHABETICAL_ASC
+                    }
+                }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val sortIcon = when (sortOrder) {
+                            CategorySortOrder.ALPHABETICAL_ASC, CategorySortOrder.ALPHABETICAL_DESC -> painterResource(id = R.drawable.ic_sort_by_alpha)
+                            CategorySortOrder.NEWEST_WISDOM_FIRST, CategorySortOrder.OLDEST_WISDOM_FIRST -> painterResource(id = R.drawable.ic_access_time)
+                        }
+                        val sortText = when (sortOrder) {
+                            CategorySortOrder.ALPHABETICAL_ASC -> "A-Z"
+                            CategorySortOrder.ALPHABETICAL_DESC -> "Z-A"
+                            CategorySortOrder.NEWEST_WISDOM_FIRST -> "Newest"
+                            CategorySortOrder.OLDEST_WISDOM_FIRST -> "Oldest"
+                        }
+                        Icon(
+                            painter = sortIcon,
+                            contentDescription = "Sort Categories",
+                            tint = ElectricGreen
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            sortText,
+                            color = ElectricGreen,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
+
             when (val state = uiState) {
                 is MainViewModel.WisdomUiState.Loading -> {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
                 }
                 is MainViewModel.WisdomUiState.Success -> {
-                    if (state.allCategories.isEmpty()) {
+                    val filteredAndSortedCategories = remember(state.allCategories, state.allWisdomFlatList, searchQuery, sortOrder) {
+                        val generalCategory = MainViewModel.DEFAULT_CATEGORY
+
+                        // Filter by search query first
+                        val searchedCategories = state.allCategories.filter {
+                            it.contains(searchQuery, ignoreCase = true)
+                        }
+
+                        // Prepare data for date-based sorting
+                        val categoryMaxDates = if (sortOrder == CategorySortOrder.NEWEST_WISDOM_FIRST || sortOrder == CategorySortOrder.OLDEST_WISDOM_FIRST) {
+                            state.allWisdomFlatList
+                                .groupBy { it.category }
+                                .mapValues { entry ->
+                                    entry.value.maxOfOrNull { it.dateCreated } ?: LocalDateTime.MIN
+                                }
+                        } else {
+                            emptyMap()
+                        }
+
+                        val sortedSearchedCategories = searchedCategories
+                            .filterNot { it.equals(generalCategory, ignoreCase = true) } // Exclude General for now
+                            .let { list ->
+                                when (sortOrder) {
+                                    CategorySortOrder.ALPHABETICAL_ASC -> list.sortedBy { it.lowercase() }
+                                    CategorySortOrder.ALPHABETICAL_DESC -> list.sortedByDescending { it.lowercase() }
+                                    CategorySortOrder.NEWEST_WISDOM_FIRST -> list.sortedByDescending { categoryMaxDates[it] ?: LocalDateTime.MIN }
+                                    CategorySortOrder.OLDEST_WISDOM_FIRST -> list.sortedBy { categoryMaxDates[it] ?: LocalDateTime.MAX }
+                                }
+                            }
+
+                        val generalList = if (searchedCategories.any { it.equals(generalCategory, ignoreCase = true) }) {
+                            listOf(generalCategory)
+                        } else {
+                            emptyList()
+                        }
+                        sortedSearchedCategories + generalList // Add General category at the end
+                    }
+
+                    if (filteredAndSortedCategories.isEmpty()) {
                         Text(
-                            "No categories found. Add wisdom with categories to manage them here.",
+                            if (searchQuery.isNotEmpty()) "No categories matching '$searchQuery'."
+                            else "No categories found. Add wisdom with categories to manage them here.",
                             color = StarWhite.copy(alpha = 0.7f),
                             modifier = Modifier.align(Alignment.CenterHorizontally).padding(16.dp)
                         )
                     } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            items(
-                                state.allCategories
-                                    .filterNot { it.equals(MainViewModel.DEFAULT_CATEGORY, ignoreCase = true) }
-                                    .sorted()
-                                        + (if (state.allCategories.any { it.equals(MainViewModel.DEFAULT_CATEGORY, ignoreCase = true) }) listOf(MainViewModel.DEFAULT_CATEGORY) else emptyList())
-                            ) { category ->
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp)
+                        ) {
+                            items(filteredAndSortedCategories, key = { it }) { category ->
                                 val isGeneralCategory = category.equals(MainViewModel.DEFAULT_CATEGORY, ignoreCase = true)
                                 val isSelectedForMainScreenExplorer = state.mainScreenExplorerCategories.contains(category)
 
@@ -123,7 +246,7 @@ fun ManageCategoriesScreen(
                                             viewModel.addCategoryToMainScreenExplorers(category)
                                         }
                                     },
-                                    onCategoryClick = { categoryName -> // New click listener for the category itself
+                                    onCategoryClick = { categoryName ->
                                         navController.navigate(Screen.WisdomList.createRoute(initialTabName = "all", categoryName = categoryName))
                                     }
                                 )
@@ -132,7 +255,7 @@ fun ManageCategoriesScreen(
                     }
                 }
                 is MainViewModel.WisdomUiState.Error -> {
-                    Text("Error loading categories: ${state.message}", color = NeonPink)
+                    Text("Error loading categories: ${state.message}", color = NeonPink, modifier = Modifier.align(Alignment.CenterHorizontally))
                 }
             }
         }
@@ -167,12 +290,12 @@ fun ManageCategoryItem(
     onRenameClick: () -> Unit,
     onClearCategoryClick: () -> Unit,
     onToggleMainScreenExplorerClick: () -> Unit,
-    onCategoryClick: (String) -> Unit // New callback for clicking the category item
+    onCategoryClick: (String) -> Unit
 ) {
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCategoryClick(categoryName) } // Make the whole card clickable
+            .clickable { onCategoryClick(categoryName) }
     ) {
         Row(
             modifier = Modifier
@@ -216,7 +339,6 @@ fun ManageCategoryItem(
     }
 }
 
-// RenameCategoryDialog and DeleteCategoryConfirmationDialog remain the same
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RenameCategoryDialog(
