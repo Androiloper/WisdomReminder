@@ -59,7 +59,6 @@ class MainViewModel @Inject constructor(
     )
     val categoryForSevenWisdomPlaylist: StateFlow<String?> = _categoryForSevenWisdomPlaylist.asStateFlow()
 
-    // State for Wisdom Explorer category - Initialized from SharedPreferences
     private val _selectedExplorerCategory = MutableStateFlow<String?>(
         prefs.getString(SELECTED_EXPLORER_CATEGORY_KEY, null)
     )
@@ -102,8 +101,6 @@ class MainViewModel @Inject constructor(
                 }
             }
         }
-        // The _selectedExplorerCategory changes will be picked up by the main `combine` block.
-        // No separate collector needed here to update _uiState for this specific property.
     }
 
     companion object {
@@ -118,6 +115,7 @@ class MainViewModel @Inject constructor(
     sealed class WisdomUiState {
         object Loading : WisdomUiState()
         data class Success(
+            val allWisdomFlatList: List<Wisdom> = emptyList(), // New: For the "ALL" tab
             val activeWisdom: List<Wisdom> = emptyList(),
             val otherQueuedWisdom: List<Wisdom> = emptyList(),
             val favoriteQueuedWisdom: List<Wisdom> = emptyList(),
@@ -130,7 +128,7 @@ class MainViewModel @Inject constructor(
             val selectedCategoriesForCards: List<String> = emptyList(),
             val categoryWisdomMap: Map<String, List<Wisdom>> = emptyMap(),
             val selectedCategoryForSevenWisdom: String? = null,
-            val selectedExplorerCategory: String? = null // Ensured this is here
+            val selectedExplorerCategory: String? = null
         ) : WisdomUiState()
         data class Error(val message: String) : WisdomUiState()
     }
@@ -189,7 +187,7 @@ class MainViewModel @Inject constructor(
     fun setSelectedExplorerCategory(category: String?) {
         viewModelScope.launch {
             Log.d(TAG, "setSelectedExplorerCategory: OLD='${_selectedExplorerCategory.value}', NEW='$category'")
-            if (_selectedExplorerCategory.value != category) { // Only update if different
+            if (_selectedExplorerCategory.value != category) {
                 _selectedExplorerCategory.value = category
                 val editor = prefs.edit()
                 if (category != null) {
@@ -197,7 +195,7 @@ class MainViewModel @Inject constructor(
                 } else {
                     editor.remove(SELECTED_EXPLORER_CATEGORY_KEY)
                 }
-                editor.apply() // Asynchronous, but _selectedExplorerCategory.value is updated immediately
+                editor.apply()
                 Log.d(TAG, "setSelectedExplorerCategory: SharedPreferences updated. Current _selectedExplorerCategory.value: '${_selectedExplorerCategory.value}'")
             }
         }
@@ -208,12 +206,12 @@ class MainViewModel @Inject constructor(
         dataCollectionJob?.cancel()
         Log.d(TAG, "initializeDataCollection: Starting data collection...")
         val initialLoadingState = _uiState.value is WisdomUiState.Loading
-        if (initialLoadingState || _uiState.value !is WisdomUiState.Success) { // Ensure loading state if not already success
+        if (initialLoadingState || _uiState.value !is WisdomUiState.Success) {
             _uiState.value = WisdomUiState.Loading
         }
 
-
         dataCollectionJob = viewModelScope.launch {
+            val allWisdomFlatListFlow = wisdomRepository.getAllWisdom() // For "ALL" tab
             val activeWisdomFlow = wisdomRepository.getActiveWisdom()
             val strictlyQueuedWisdomFlow = wisdomRepository.getStrictlyQueuedWisdom()
             val favoriteDisplayableWisdomFlow = wisdomRepository.getFavoriteDisplayableWisdom()
@@ -235,37 +233,38 @@ class MainViewModel @Inject constructor(
             }
 
             combine(
-                activeWisdomFlow,                 // values[0]
-                strictlyQueuedWisdomFlow,         // values[1]
-                favoriteDisplayableWisdomFlow,    // values[2]
-                sevenWisdomPlaylistFlow,          // values[3]
-                completedWisdomFlow,              // values[4]
-                activeWisdomCountFlow,            // values[5]
-                completedWisdomCountFlow,         // values[6]
-                allCategoriesFlow,                // values[7]
-                _selectedCategoriesForCards,      // values[8]
-                _categoryForSevenWisdomPlaylist,  // values[9]
-                _selectedExplorerCategory         // values[10]
+                allWisdomFlatListFlow,            // values[0] - NEW
+                activeWisdomFlow,                 // values[1]
+                strictlyQueuedWisdomFlow,         // values[2]
+                favoriteDisplayableWisdomFlow,    // values[3]
+                sevenWisdomPlaylistFlow,          // values[4]
+                completedWisdomFlow,              // values[5]
+                activeWisdomCountFlow,            // values[6]
+                completedWisdomCountFlow,         // values[7]
+                allCategoriesFlow,                // values[8]
+                _selectedCategoriesForCards,      // values[9]
+                _categoryForSevenWisdomPlaylist,  // values[10]
+                _selectedExplorerCategory         // values[11]
             ) { values ->
                 val currentServiceStatus = (_uiState.value as? WisdomUiState.Success)?.serviceRunning ?: WisdomDisplayService.isServiceRunning
                 val currentCategoryMap = (_uiState.value as? WisdomUiState.Success)?.categoryWisdomMap ?: emptyMap()
 
-                Log.d(TAG, "Combine: selectedExplorerCategory from flow: ${values[10] as String?}")
                 @Suppress("UNCHECKED_CAST")
                 WisdomUiState.Success(
-                    activeWisdom = values[0] as List<Wisdom>,
-                    otherQueuedWisdom = values[1] as List<Wisdom>,
-                    favoriteQueuedWisdom = values[2] as List<Wisdom>,
-                    sevenWisdomPlaylist = values[3] as List<Wisdom>,
-                    completedWisdom = values[4] as List<Wisdom>,
-                    activeCount = values[5] as Int,
-                    completedCount = values[6] as Int,
-                    allCategories = (values[7] as List<String>).distinct().sorted(),
-                    selectedCategoriesForCards = values[8] as List<String>,
-                    selectedCategoryForSevenWisdom = values[9] as String?,
-                    selectedExplorerCategory = values[10] as String?,
+                    allWisdomFlatList = values[0] as List<Wisdom>, // New
+                    activeWisdom = values[1] as List<Wisdom>,
+                    otherQueuedWisdom = values[2] as List<Wisdom>,
+                    favoriteQueuedWisdom = values[3] as List<Wisdom>,
+                    sevenWisdomPlaylist = values[4] as List<Wisdom>,
+                    completedWisdom = values[5] as List<Wisdom>,
+                    activeCount = values[6] as Int,
+                    completedCount = values[7] as Int,
+                    allCategories = (values[8] as List<String>).distinct().sorted(),
+                    selectedCategoriesForCards = values[9] as List<String>,
+                    selectedCategoryForSevenWisdom = values[10] as String?,
+                    selectedExplorerCategory = values[11] as String?,
                     serviceRunning = currentServiceStatus,
-                    categoryWisdomMap = currentCategoryMap // Preserve map until updateCategoryData runs
+                    categoryWisdomMap = currentCategoryMap
                 )
             }.catch { e ->
                 Log.e(TAG, "initializeDataCollection (combine): Exception", e)
@@ -312,7 +311,6 @@ class MainViewModel @Inject constructor(
             if (mapChanged || keysDiffer || sizeDiffer) {
                 _uiState.value = currentSuccessState.copy(
                     categoryWisdomMap = newCategoryWisdomMap.toMap()
-                    // selectedExplorerCategory is already part of currentSuccessState from the main combine
                 )
             }
         }
@@ -418,7 +416,7 @@ class MainViewModel @Inject constructor(
                     onSuccess = {
                         _events.emit(UiEvent.WisdomUpdated)
                         if (_selectedWisdom.value?.id == wisdom.id) {
-                            getWisdomById(wisdom.id) // Refresh selected wisdom
+                            getWisdomById(wisdom.id)
                         }
                     },
                     onFailure = { error ->
@@ -435,7 +433,6 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 if (wisdom.category == _categoryForSevenWisdomPlaylist.value) {
-                    // Potential logic if it affects the 7 wisdom playlist
                 }
                 wisdomRepository.deleteWisdom(wisdom).fold(
                     onSuccess = {
@@ -461,7 +458,7 @@ class MainViewModel @Inject constructor(
                     onSuccess = {
                         _events.emit(UiEvent.WisdomActivated)
                         if (_selectedWisdom.value?.id == wisdomId) {
-                            getWisdomById(wisdomId) // Refresh selected wisdom
+                            getWisdomById(wisdomId)
                         }
                     },
                     onFailure = { error ->
@@ -507,7 +504,6 @@ class MainViewModel @Inject constructor(
     fun refreshData() {
         viewModelScope.launch {
             Log.d(TAG, "refreshData called. Re-initializing data collection.")
-            // No need to explicitly set to Loading if initializeDataCollection handles it.
             initializeDataCollection()
         }
     }
@@ -634,15 +630,16 @@ class MainViewModel @Inject constructor(
     fun debugDatabaseContents() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val allWisdom = wisdomRepository.getAllWisdom().first()
+                val allWisdom = wisdomRepository.getAllWisdom().first() // Use the flat list source
                 Log.d(TAG, "debugDatabaseContents: === All Wisdom in DB (${allWisdom.size}) ===")
                 allWisdom.forEach { wisdom ->
-                    Log.d(TAG, "DB Item: ID=${wisdom.id}, Text='${wisdom.text.take(30)}...', Cat='${wisdom.category}', Active=${wisdom.isActive}, Queued=${!wisdom.isActive && wisdom.dateCompleted == null}, Fav=${wisdom.isFavorite}, Ord=${wisdom.orderIndex}")
+                    Log.d(TAG, "DB Item: ID=${wisdom.id}, Text='${wisdom.text.take(30)}...', Cat='${wisdom.category}', Active=${wisdom.isActive}, Queued=${!wisdom.isActive && wisdom.dateCompleted == null}, Fav=${wisdom.isFavorite}, Ord=${wisdom.orderIndex}, Created=${wisdom.dateCreated}")
                 }
                 Log.d(TAG, "debugDatabaseContents: === End of All Wisdom ===")
 
                 (_uiState.value as? WisdomUiState.Success)?.let {
                     Log.d(TAG, "debugDatabaseContents: === Current UI State ===")
+                    Log.d(TAG, "AllFlatList: ${it.allWisdomFlatList.size}")
                     Log.d(TAG, "Active: ${it.activeWisdom.size}, OtherQueued: ${it.otherQueuedWisdom.size}, FavoriteQueued: ${it.favoriteQueuedWisdom.size}, SevenPlaylist: ${it.sevenWisdomPlaylist.size}, Completed: ${it.completedWisdom.size}")
                     Log.d(TAG, "Selected Cat for 7: ${it.selectedCategoryForSevenWisdom}")
                     Log.d(TAG, "Selected Explorer Cat: ${it.selectedExplorerCategory}")

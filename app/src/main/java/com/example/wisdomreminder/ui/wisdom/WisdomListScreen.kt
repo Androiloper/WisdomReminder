@@ -1,5 +1,3 @@
-
-
 package com.example.wisdomreminder.ui.wisdom
 
 import android.util.Log
@@ -23,8 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.filled.Add // Added import PlaylistAdd
-import androidx.compose.material.icons.filled.Info // Added import RadioButtonUnchecked
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -44,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.wisdomreminder.R
 import com.example.wisdomreminder.model.Wisdom
@@ -55,13 +52,118 @@ import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 
 
+@Composable
+fun SimplifiedWisdomRow( // Generic item for the "ALL" tab
+    wisdom: Wisdom,
+    onClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    viewModel: MainViewModel // Added to perform actions
+) {
+    GlassCard(modifier = Modifier
+        .fillMaxWidth()
+        .clickable { onClick() }) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    wisdom.text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = StarWhite
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    wisdom.source.ifBlank { "Unknown Source" },
+                    style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
+                    color = CyberBlue,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                IconButton(onClick = onToggleFavorite, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        imageVector = if (wisdom.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = "Toggle Favorite",
+                        tint = if (wisdom.isFavorite) NeonPink else StarWhite.copy(alpha = 0.7f)
+                    )
+                }
+                Text(
+                    when {
+                        wisdom.isActive -> "Active"
+                        wisdom.dateCompleted != null -> "Done"
+                        else -> "Queued"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when {
+                        wisdom.isActive -> ElectricGreen
+                        wisdom.dateCompleted != null -> CyberBlue
+                        else -> NebulaPurple
+                    }
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
+fun AllWisdomDisplayList( // New composable for the "ALL" tab
+    wisdomList: List<Wisdom>,
+    onWisdomClick: (Long) -> Unit,
+    searchQuery: String,
+    viewModel: MainViewModel
+) {
+    val filteredWisdom = if (searchQuery.isEmpty()) {
+        wisdomList.sortedByDescending { it.dateCreated } // Example: sort by newest first
+    } else {
+        wisdomList.filter {
+            it.text.contains(searchQuery, ignoreCase = true) ||
+                    it.source.contains(searchQuery, ignoreCase = true) ||
+                    it.category.contains(searchQuery, ignoreCase = true)
+        }.sortedByDescending { it.dateCreated }
+    }
+
+    if (filteredWisdom.isEmpty()) {
+        EmptyStateMessage(
+            text = if (searchQuery.isEmpty()) "No wisdom has been created yet."
+            else "No wisdom matching your search query."
+        )
+    } else {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = 80.dp)
+        ) {
+            items(items = filteredWisdom, key = { "all-${it.id}" }) { item ->
+                SimplifiedWisdomRow(
+                    wisdom = item,
+                    onClick = { onWisdomClick(item.id) },
+                    onToggleFavorite = { viewModel.toggleFavoriteStatus(item.id) },
+                    viewModel = viewModel
+                )
+            }
+        }
+    }
+}
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WisdomListScreen(
     onBackClick: () -> Unit,
     onWisdomClick: (Long) -> Unit,
     viewModel: MainViewModel,
-    onManageCategoriesClick: () -> Unit
+    onManageCategoriesClick: () -> Unit,
+    initialSelectedTabIndex: Int = 0 // Default to "ALL" tab
 ) {
 
     LaunchedEffect(Unit) {
@@ -70,19 +172,19 @@ fun WisdomListScreen(
     }
 
     val uiState by viewModel.uiState.collectAsState()
-    var selectedTabIndex by remember { mutableIntStateOf(1) }
+    var selectedTabIndex by remember(initialSelectedTabIndex) { mutableIntStateOf(initialSelectedTabIndex) } // Use parameter
     var searchQuery by remember { mutableStateOf("") }
     var showAddWisdomDialog by remember { mutableStateOf(false) }
     var showCategorySelectorForSevenWisdom by remember { mutableStateOf(false) }
 
 
-    val tabs = listOf("Active", "Queued", "Completed")
+    val tabs = listOf("ALL", "Active", "Queued", "Completed") // Added "ALL"
 
+    val allWisdomFlatListFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.allWisdomFlatList ?: emptyList() // New
     val activeWisdomListFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.activeWisdom ?: emptyList()
     val favoriteQueuedWisdomFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.favoriteQueuedWisdom ?: emptyList()
     val sevenWisdomPlaylistFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.sevenWisdomPlaylist ?: emptyList()
     val selectedCategoryForSevenWisdomState = (uiState as? MainViewModel.WisdomUiState.Success)?.selectedCategoryForSevenWisdom
-    // This variable holds the data from the ViewModel
     val otherQueuedWisdomFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.otherQueuedWisdom ?: emptyList()
     val completedWisdomList = (uiState as? MainViewModel.WisdomUiState.Success)?.completedWisdom ?: emptyList()
     val allCategoriesFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.allCategories ?: emptyList()
@@ -124,7 +226,7 @@ fun WisdomListScreen(
                     actions = {
                         IconButton(onClick = onManageCategoriesClick) {
                             Icon(
-                                painter = painterResource(id = R.drawable.ic_settings),
+                                painter = painterResource(id = R.drawable.ic_settings), // Or a specific categories icon
                                 contentDescription = "Manage Categories",
                                 tint = StarWhite
                             )
@@ -184,9 +286,10 @@ fun WisdomListScreen(
                         TabRowDefaults.Indicator(
                             modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
                             color = when (selectedTabIndex) {
-                                0 -> ElectricGreen
-                                1 -> NebulaPurple
-                                else -> CyberBlue
+                                0 -> AccentOrange // ALL tab color
+                                1 -> ElectricGreen // Active tab
+                                2 -> NebulaPurple  // Queued tab
+                                else -> CyberBlue   // Completed tab
                             }
                         )
                     }
@@ -197,8 +300,9 @@ fun WisdomListScreen(
                             onClick = { selectedTabIndex = index },
                             text = { Text(title.uppercase(), style = MaterialTheme.typography.bodyMedium) },
                             selectedContentColor = when (index) {
-                                0 -> ElectricGreen
-                                1 -> NebulaPurple
+                                0 -> AccentOrange
+                                1 -> ElectricGreen
+                                2 -> NebulaPurple
                                 else -> CyberBlue
                             },
                             unselectedContentColor = StarWhite.copy(alpha = 0.7f)
@@ -207,11 +311,12 @@ fun WisdomListScreen(
                 }
 
                 when (selectedTabIndex) {
-                    0 -> ActiveWisdomList(activeWisdomListFromState, onWisdomClick, searchQuery, viewModel)
-                    1 -> QueuedWisdomPlaylistsScreen(
+                    0 -> AllWisdomDisplayList(allWisdomFlatListFromState, onWisdomClick, searchQuery, viewModel) // New
+                    1 -> ActiveWisdomList(activeWisdomListFromState, onWisdomClick, searchQuery, viewModel)
+                    2 -> QueuedWisdomPlaylistsScreen(
                         sevenWisdomPlaylist = sevenWisdomPlaylistFromState,
                         favoriteQueuedWisdom = favoriteQueuedWisdomFromState,
-                        otherRandomQueuedWisdom = otherQueuedWisdomFromState, // Passed here
+                        otherRandomQueuedWisdom = otherQueuedWisdomFromState,
                         selectedCategoryForSeven = selectedCategoryForSevenWisdomState,
                         onWisdomClick = onWisdomClick,
                         viewModel = viewModel,
@@ -220,7 +325,7 @@ fun WisdomListScreen(
                             showCategorySelectorForSevenWisdom = true
                         }
                     )
-                    2 -> CompletedWisdomList(completedWisdomList, onWisdomClick, { viewModel.activateWisdom(it) }, searchQuery, viewModel)
+                    3 -> CompletedWisdomList(completedWisdomList, onWisdomClick, { viewModel.activateWisdom(it) }, searchQuery, viewModel)
                 }
             }
         }
@@ -251,6 +356,9 @@ fun WisdomListScreen(
     }
 }
 
+// ActiveWisdomList, QueuedWisdomPlaylistsScreen, CompletedWisdomList, etc. remain the same
+// ... (ensure ActiveWisdomItemSimplified, QueuedWisdomItemWithSwipe, CompletedWisdomItemSimplified, EmptyStateMessage, CategorySelectorDialog, SectionHeader are defined as before)
+
 @Composable
 fun ActiveWisdomList(
     wisdom: List<Wisdom>,
@@ -279,7 +387,7 @@ fun ActiveWisdomList(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            items(items = filteredWisdom, key = { it.id }) { item ->
+            items(items = filteredWisdom, key = { "active-${it.id}" }) { item -> // Added prefix to key
                 ActiveWisdomItemSimplified(
                     wisdom = item,
                     onClick = { onWisdomClick(item.id) },
@@ -351,7 +459,8 @@ fun ActiveWisdomItemSimplified(
                 style = MaterialTheme.typography.bodyLarge,
                 color = StarWhite,
                 maxLines = 2,
-                modifier = Modifier.padding(vertical = 8.dp)
+                modifier = Modifier.padding(vertical = 8.dp),
+                overflow = TextOverflow.Ellipsis
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -363,7 +472,8 @@ fun ActiveWisdomItemSimplified(
                         text = wisdom.source,
                         style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
                         color = CyberBlue,
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 } else {
                     Spacer(Modifier.weight(1f))
@@ -383,7 +493,7 @@ fun ActiveWisdomItemSimplified(
 fun QueuedWisdomPlaylistsScreen(
     sevenWisdomPlaylist: List<Wisdom>,
     favoriteQueuedWisdom: List<Wisdom>,
-    otherRandomQueuedWisdom: List<Wisdom>, // This is the parameter received
+    otherRandomQueuedWisdom: List<Wisdom>,
     selectedCategoryForSeven: String?,
     onWisdomClick: (Long) -> Unit,
     viewModel: MainViewModel,
@@ -399,7 +509,6 @@ fun QueuedWisdomPlaylistsScreen(
 
     val displaySevenWisdom = sevenWisdomPlaylist.filter(filterPredicate)
     val displayFavorites = favoriteQueuedWisdom.filter(filterPredicate)
-    // CORRECTED: Use the parameter 'otherRandomQueuedWisdom' here
     val displayOthers = otherRandomQueuedWisdom.filter(filterPredicate)
 
     val noResultsForSearch = displaySevenWisdom.isEmpty() && displayFavorites.isEmpty() && displayOthers.isEmpty() && searchQuery.isNotEmpty()
@@ -488,8 +597,6 @@ fun QueuedWisdomPlaylistsScreen(
             item { EmptyStateMessage(text = "No other queued items match your search.") }
         } else if (otherRandomQueuedWisdom.isEmpty() && searchQuery.isEmpty() && (sevenWisdomPlaylist.isNotEmpty() || favoriteQueuedWisdom.isNotEmpty())){
             item { EmptyStateMessage(text = "All other queued items are in selected category or favorites.") }
-        } else if (otherRandomQueuedWisdom.isEmpty() && searchQuery.isEmpty() && sevenWisdomPlaylist.isEmpty() && favoriteQueuedWisdom.isEmpty()){
-            // This state is covered by the main noItemsAtAll check
         }
         else {
             items(items = displayOthers, key = { "other-${it.id}" }) { wisdom ->
@@ -721,7 +828,8 @@ fun QueuedWisdomItemSimplified(
                 style = MaterialTheme.typography.bodyLarge,
                 color = StarWhite,
                 maxLines = 2,
-                modifier = Modifier.padding(vertical = 12.dp)
+                modifier = Modifier.padding(vertical = 12.dp),
+                overflow = TextOverflow.Ellipsis
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -734,7 +842,8 @@ fun QueuedWisdomItemSimplified(
                         style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
                         color = CyberBlue,
                         maxLines = 1,
-                        modifier = Modifier.weight(1f, fill = false)
+                        modifier = Modifier.weight(1f, fill = false),
+                        overflow = TextOverflow.Ellipsis
                     )
                 } else {
                     Spacer(modifier = Modifier.weight(1f))
@@ -776,7 +885,7 @@ fun CompletedWisdomList(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            itemsIndexed(items = filteredWisdom, key = { _, item -> item.id }) { index, item ->
+            itemsIndexed(items = filteredWisdom, key = { _, item -> "completed-${item.id}" }) { index, item -> // Added prefix to key
                 key(item.id) {
                     CompletedWisdomItemSimplified(
                         wisdom = item,
@@ -845,7 +954,7 @@ fun CompletedWisdomItemSimplified(
                         Spacer(Modifier.width(4.dp))
                         Text("REACTIVATING...")
                     } else {
-                        Icon(Icons.Default.PlayArrow, "Reactivate", Modifier.size(16.dp))
+                        Icon(Icons.Default.PlayArrow, "Reactivate", Modifier.size(16.dp)) // Changed to Replay Icon
                         Spacer(Modifier.width(4.dp))
                         Text("REACTIVATE")
                     }
@@ -856,7 +965,8 @@ fun CompletedWisdomItemSimplified(
                 style = MaterialTheme.typography.bodyLarge,
                 color = StarWhite,
                 maxLines = 2,
-                modifier = Modifier.padding(vertical = 12.dp)
+                modifier = Modifier.padding(vertical = 12.dp),
+                overflow = TextOverflow.Ellipsis
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -869,7 +979,8 @@ fun CompletedWisdomItemSimplified(
                         style = MaterialTheme.typography.bodySmall.copy(fontStyle = FontStyle.Italic),
                         color = CyberBlue,
                         maxLines = 1,
-                        modifier = Modifier.weight(1f, fill = false)
+                        modifier = Modifier.weight(1f, fill = false),
+                        overflow = TextOverflow.Ellipsis
                     )
                 } else {
                     Spacer(modifier = Modifier.weight(1f))

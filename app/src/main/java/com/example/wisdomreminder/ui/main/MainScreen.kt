@@ -33,27 +33,27 @@ import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.ui.components.*
 import com.example.wisdomreminder.ui.theme.*
 import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
-import androidx.compose.material.icons.filled.Info // style
-import androidx.compose.material.icons.filled.List // Import List icon
-// import com.example.wisdomreminder.ui.navigation.Screen // Not directly used here
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
+import androidx.compose.foundation.horizontalScroll
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     viewModel: MainViewModel,
     onSettingsClick: () -> Unit,
-    onWisdomListClick: () -> Unit,
+    onNavigateToWisdomList: (defaultTab: String?) -> Unit,
     onWisdomClick: (Long) -> Unit,
-    onManageCategoriesClick: () -> Unit
+    onNavigateToManageCategories: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     var showAddWisdomDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     val localTAG = "MainScreen"
+    var showCategorySelectionDialog by remember { mutableStateOf(false) } // State for dialog visibility
 
-    // No longer needed here, will come from viewModel.uiState
-    // var selectedCategoryForExplorer by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -167,177 +167,146 @@ fun MainScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(paddingValues)
-                            .verticalScroll(scrollState)
-                            .padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            StatCard("ACTIVE", state.activeCount.toString(), Icons.Default.PlayArrow, ElectricGreen, Modifier.weight(1f))
-                            StatCard("COMPLETED", state.completedCount.toString(), Icons.Default.PlayArrow, CyberBlue, Modifier.weight(1f))
-                        }
-
-                        val allWisdomItems = remember(
-                            state.activeWisdom,
-                            state.otherQueuedWisdom,
-                            state.favoriteQueuedWisdom,
-                            state.sevenWisdomPlaylist,
-                            state.completedWisdom
-                        ) {
-                            (state.activeWisdom +
-                                    state.otherQueuedWisdom +
-                                    state.favoriteQueuedWisdom +
-                                    state.sevenWisdomPlaylist +
-                                    state.completedWisdom
-                                    ).distinctBy { it.id }
-                        }
-
-                        if (allWisdomItems.isNotEmpty()) {
-                            SwipeableWisdomCards(
-                                allWisdom = allWisdomItems,
-                                onWisdomClick = onWisdomClick
+                        HorizontalNavButtons(
+                            buttons = listOf(
+                                NavButtonInfo("WISDOM", onClick = { onNavigateToWisdomList("all") }, color = CyberBlue),
+                                NavButtonInfo("CATEGORY", onClick = onNavigateToManageCategories, color = ElectricGreen),
+                                NavButtonInfo("QUEUE", onClick = { onNavigateToWisdomList("queued") }, color = NeonPink),
+                                NavButtonInfo("DASHBOARD+", onClick = { showCategorySelectionDialog = true }, color = AccentOrange) // New button
                             )
-                        }
-
-                        Text(
-                            text = "WISDOM EXPLORER",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = NeonPink,
-                            modifier = Modifier.padding(top = 16.dp, bottom = 0.dp)
-                        )
-                        CategoryExplorerCard(
-                            allWisdom = allWisdomItems,
-                            selectedCategory = state.selectedExplorerCategory, // Use from ViewModel
-                            allCategories = state.allCategories,
-                            onWisdomClick = onWisdomClick,
-                            onCategorySelected = { category ->
-                                viewModel.setSelectedExplorerCategory(category) // Update ViewModel
-                            }
                         )
 
-                        Text(
-                            text = "MY DASHBOARD",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = ElectricGreen,
-                            modifier = Modifier.padding(top = 16.dp)
-                        )
-                        if (state.selectedCategoriesForCards.isEmpty()) {
-                            GlassCard(modifier = Modifier.fillMaxWidth().height(100.dp)) {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text("Add category cards to your dashboard via the button below.", style = MaterialTheme.typography.bodyMedium, color = StarWhite.copy(alpha = 0.7f), textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
-                                }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState)
+                                .padding(horizontal = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                StatCard("ACTIVE", state.activeCount.toString(), Icons.Default.PlayArrow, ElectricGreen, Modifier.weight(1f))
+                                StatCard("COMPLETED", state.completedCount.toString(), Icons.Default.PlayArrow, CyberBlue, Modifier.weight(1f))
                             }
-                        } else {
-                            Log.d(localTAG, "Dashboard rendering. Selected categories: ${state.selectedCategoriesForCards}. CategoryWisdomMap keys: ${state.categoryWisdomMap.keys}")
-                            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                state.selectedCategoriesForCards.forEach { category ->
-                                    val wisdomListForCategory = state.categoryWisdomMap[category] ?: emptyList()
-                                    Log.d(localTAG, "Dashboard Card: Category='${category}', Items=${wisdomListForCategory.size}, Wisdoms: ${wisdomListForCategory.joinToString { it.text.take(15) }}")
-                                    CategoryWisdomCard(
-                                        category = category,
-                                        wisdomList = wisdomListForCategory,
-                                        onWisdomClick = onWisdomClick,
-                                        onRemove = { viewModel.removeCategoryCard(category) }
-                                    )
-                                }
+
+                            val allWisdomItems = remember(
+                                state.activeWisdom,
+                                state.otherQueuedWisdom,
+                                state.favoriteQueuedWisdom,
+                                state.sevenWisdomPlaylist,
+                                state.completedWisdom
+                            ) {
+                                (state.activeWisdom +
+                                        state.otherQueuedWisdom +
+                                        state.favoriteQueuedWisdom +
+                                        state.sevenWisdomPlaylist +
+                                        state.completedWisdom
+                                        ).distinctBy { it.id }
                             }
-                        }
 
-                        var showCategorySelectionDialog by remember { mutableStateOf(false) }
-                        Button(
-                            onClick = { showCategorySelectionDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = CyberBlue.copy(alpha = 0.8f)),
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = "Add Category Card", modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("ADD CATEGORY TO DASHBOARD")
-                        }
+                            if (allWisdomItems.isNotEmpty()) {
+                                SwipeableWisdomCards(
+                                    allWisdom = allWisdomItems,
+                                    onWisdomClick = onWisdomClick
+                                )
+                            }
 
-                        Button(
-                            onClick = onWisdomListClick,
-                            colors = ButtonDefaults.buttonColors(containerColor = MoonGray.copy(alpha = 0.4f)),
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Default.List, contentDescription = "View All Lists", tint = StarWhite)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("VIEW ALL LISTS", color = StarWhite)
-                        }
-
-                        Button(
-                            onClick = onManageCategoriesClick,
-                            colors = ButtonDefaults.buttonColors(containerColor = MoonGray.copy(alpha = 0.3f)),
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                        ) {
-                            Icon(Icons.Filled.Info, contentDescription = "Manage Categories", tint = StarWhite)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("MANAGE CATEGORIES", color = StarWhite)
-                        }
-
-                        if (showCategorySelectionDialog) {
-                            val availableCategoriesForDialog = state.allCategories.filterNot { it in state.selectedCategoriesForCards }
-                            val allCategoriesFromState = state.allCategories
-
-                            CategorySelectionDialog(
-                                availableCategories = availableCategoriesForDialog,
-                                allCategoriesInSystem = allCategoriesFromState,
-                                selectedCategoriesOnDashboard = state.selectedCategoriesForCards,
-                                onDismiss = { showCategorySelectionDialog = false },
-                                onCategorySelected = { category ->
-                                    viewModel.addCategoryCard(category)
-                                    showCategorySelectionDialog = false
-                                }
-                            )
-                        }
-
-                        if (state.activeWisdom.isNotEmpty()) {
                             Text(
-                                text = "FEATURED ACTIVE WISDOM",
+                                text = "WISDOM EXPLORER",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = NeonPink,
+                                modifier = Modifier.padding(top = 16.dp, bottom = 0.dp)
+                            )
+                            CategoryExplorerCard(
+                                allWisdom = allWisdomItems,
+                                selectedCategory = state.selectedExplorerCategory,
+                                allCategories = state.allCategories,
+                                onWisdomClick = onWisdomClick,
+                                onCategorySelected = { category ->
+                                    viewModel.setSelectedExplorerCategory(category)
+                                }
+                            )
+
+                            Text(
+                                text = "MY DASHBOARD",
                                 style = MaterialTheme.typography.titleLarge,
                                 color = ElectricGreen,
-                                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                                modifier = Modifier.padding(top = 16.dp)
                             )
-                            ActiveWisdomCard(
-                                wisdom = state.activeWisdom.first(),
-                                onClick = { wisdom -> onWisdomClick(wisdom.id) },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        } else if (allWisdomItems.isEmpty()){
-                            GlassCard(
-                                modifier = Modifier.fillMaxWidth().height(150.dp).clickable { showAddWisdomDialog = true },
-                            ) {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("No wisdom yet. Add your first one!", style = MaterialTheme.typography.bodyLarge, color = StarWhite, textAlign = TextAlign.Center)
+                            if (state.selectedCategoriesForCards.isEmpty()) {
+                                GlassCard(modifier = Modifier.fillMaxWidth().height(100.dp)) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Text("Add category cards to your dashboard using the 'DASHBOARD+' button above.", style = MaterialTheme.typography.bodyMedium, color = StarWhite.copy(alpha = 0.7f), textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
+                                    }
+                                }
+                            } else {
+                                Log.d(localTAG, "Dashboard rendering. Selected categories: ${state.selectedCategoriesForCards}. CategoryWisdomMap keys: ${state.categoryWisdomMap.keys}")
+                                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    state.selectedCategoriesForCards.forEach { category ->
+                                        val wisdomListForCategory = state.categoryWisdomMap[category] ?: emptyList()
+                                        Log.d(localTAG, "Dashboard Card: Category='${category}', Items=${wisdomListForCategory.size}, Wisdoms: ${wisdomListForCategory.joinToString { it.text.take(15) }}")
+                                        CategoryWisdomCard(
+                                            category = category,
+                                            wisdomList = wisdomListForCategory,
+                                            onWisdomClick = onWisdomClick,
+                                            onRemove = { viewModel.removeCategoryCard(category) }
+                                        )
                                     }
                                 }
                             }
-                        }
 
-                        if (allWisdomItems.isNotEmpty()) {
-                            AllWisdomSection(
-                                allWisdom = allWisdomItems,
-                                onWisdomClick = onWisdomClick
-                            )
-                        }
+                            // The old "ADD CATEGORY TO DASHBOARD" button is now removed from here.
 
-                        if (allWisdomItems.isEmpty() && state.activeWisdom.isEmpty()) {
+                            if (state.activeWisdom.isNotEmpty()) {
+                                Text(
+                                    text = "FEATURED ACTIVE WISDOM",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = ElectricGreen,
+                                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                                )
+                                ActiveWisdomCard(
+                                    wisdom = state.activeWisdom.first(),
+                                    onClick = { wisdom -> onWisdomClick(wisdom.id) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else if (allWisdomItems.isEmpty()){
+                                GlassCard(
+                                    modifier = Modifier.fillMaxWidth().height(150.dp).clickable { showAddWisdomDialog = true },
+                                ) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text("No wisdom yet. Add your first one!", style = MaterialTheme.typography.bodyLarge, color = StarWhite, textAlign = TextAlign.Center)
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (allWisdomItems.isNotEmpty()) {
+                                AllWisdomSection(
+                                    allWisdom = allWisdomItems,
+                                    onWisdomClick = onWisdomClick
+                                )
+                            }
+
+                            if (allWisdomItems.isEmpty() && state.activeWisdom.isEmpty()) {
+                                Button(
+                                    onClick = { viewModel.addSampleWisdom() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = NeonPink),
+                                    modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 16.dp)
+                                ) { Text("ADD SAMPLE WISDOM") }
+                            }
+
                             Button(
-                                onClick = { viewModel.addSampleWisdom() },
-                                colors = ButtonDefaults.buttonColors(containerColor = NeonPink),
-                                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 16.dp)
-                            ) { Text("ADD SAMPLE WISDOM") }
-                        }
+                                onClick = { viewModel.debugDatabaseContents() },
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentOrange),
+                                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)
+                            ) {
+                                Text("DEBUG DB")
+                            }
 
-                        Button(
-                            onClick = { viewModel.debugDatabaseContents() },
-                            colors = ButtonDefaults.buttonColors(containerColor = AccentOrange),
-                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)
-                        ) {
-                            Text("DEBUG DB")
+                            Spacer(modifier = Modifier.height(80.dp))
                         }
-
-                        Spacer(modifier = Modifier.height(80.dp))
                     }
                 }
 
@@ -348,6 +317,22 @@ fun MainScreen(
                         onSave = { text, source, category ->
                             viewModel.addWisdom(text, source, category)
                             showAddWisdomDialog = false
+                        }
+                    )
+                }
+                // This dialog is now triggered by the "DASHBOARD+" button in HorizontalNavButtons
+                if (showCategorySelectionDialog) {
+                    val availableCategoriesForDialog = state.allCategories.filterNot { it in state.selectedCategoriesForCards }
+                    val allCategoriesFromState = state.allCategories
+
+                    CategorySelectionDialog(
+                        availableCategories = availableCategoriesForDialog,
+                        allCategoriesInSystem = allCategoriesFromState,
+                        selectedCategoriesOnDashboard = state.selectedCategoriesForCards,
+                        onDismiss = { showCategorySelectionDialog = false },
+                        onCategorySelected = { category ->
+                            viewModel.addCategoryCard(category)
+                            showCategorySelectionDialog = false
                         }
                     )
                 }

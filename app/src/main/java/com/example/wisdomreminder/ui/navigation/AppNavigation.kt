@@ -14,13 +14,16 @@ import com.example.wisdomreminder.ui.settings.SettingsScreen
 import com.example.wisdomreminder.ui.settings.SettingsViewModel
 import com.example.wisdomreminder.ui.wisdom.WisdomDetailScreen
 import com.example.wisdomreminder.ui.wisdom.WisdomListScreen
-// Import for ManageCategoriesScreen was added in the previous conceptual step
-import com.example.wisdomreminder.ui.categories.ManageCategoriesScreen // Ensure this path is correct
+import com.example.wisdomreminder.ui.categories.ManageCategoriesScreen
 
 sealed class Screen(val route: String) {
     object Main : Screen("main")
     object Settings : Screen("settings")
-    object WisdomList : Screen("wisdom_list")
+    object WisdomList : Screen("wisdom_list?initialTab={initialTab}") {
+        fun createRoute(initialTabName: String? = null): String {
+            return initialTabName?.let { "wisdom_list?initialTab=$it" } ?: "wisdom_list"
+        }
+    }
     object WisdomDetail : Screen("wisdom_detail/{wisdomId}") {
         fun createRoute(wisdomId: Long): String = "wisdom_detail/$wisdomId"
     }
@@ -35,36 +38,48 @@ fun AppNavigation(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Main.route // "main"
+        startDestination = Screen.Main.route
     ) {
-        composable(Screen.Main.route) { // route = "main"
+        composable(Screen.Main.route) {
             MainScreen(
                 viewModel = mainViewModel,
                 onSettingsClick = { navController.navigate(Screen.Settings.route) },
-                onManageCategoriesClick = { navController.navigate(Screen.ManageCategories.route) }, // Add this
-                onWisdomListClick = { navController.navigate(Screen.WisdomList.route) },
+                onNavigateToManageCategories = { navController.navigate(Screen.ManageCategories.route) },
+                onNavigateToWisdomList = { tabName -> navController.navigate(Screen.WisdomList.createRoute(tabName)) },
                 onWisdomClick = { wisdomId -> navController.navigate(Screen.WisdomDetail.createRoute(wisdomId)) }
             )
         }
 
-        composable(Screen.Settings.route) { // route = "settings"
+        composable(Screen.Settings.route) {
             SettingsScreen(
                 onBackClick = { navController.popBackStack() },
                 viewModel = settingsViewModel
             )
         }
 
-        composable(Screen.WisdomList.route) { // route = "wisdom_list"
+        composable(
+            route = Screen.WisdomList.route,
+            arguments = listOf(navArgument("initialTab") { type = NavType.StringType; nullable = true })
+        ) { backStackEntry ->
+            val initialTabName = backStackEntry.arguments?.getString("initialTab")
+            val initialTabIndex = when (initialTabName?.lowercase()) {
+                "all" -> 0
+                "active" -> 1
+                "queued" -> 2
+                "completed" -> 3
+                else -> 0 // Default to "ALL" if no or unknown tab is specified
+            }
             WisdomListScreen(
                 onBackClick = { navController.popBackStack() },
                 onWisdomClick = { wisdomId -> navController.navigate(Screen.WisdomDetail.createRoute(wisdomId)) },
                 viewModel = mainViewModel,
-                onManageCategoriesClick = { navController.navigate(Screen.ManageCategories.route) }
+                onManageCategoriesClick = { navController.navigate(Screen.ManageCategories.route) },
+                initialSelectedTabIndex = initialTabIndex
             )
         }
 
         composable(
-            route = Screen.WisdomDetail.route, // route = "wisdom_detail/{wisdomId}"
+            route = Screen.WisdomDetail.route,
             arguments = listOf(
                 navArgument("wisdomId") { type = NavType.LongType }
             )
@@ -77,7 +92,7 @@ fun AppNavigation(
             )
         }
 
-        composable(Screen.ManageCategories.route) { // route = "manage_categories"
+        composable(Screen.ManageCategories.route) {
             ManageCategoriesScreen(
                 viewModel = mainViewModel,
                 onBackClick = { navController.popBackStack() }
