@@ -37,8 +37,6 @@ import androidx.compose.material.icons.filled.ArrowBack // Keep for TopAppBar
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
-// Removed: import androidx.compose.material.icons.filled.ArrowDropDown
-// Removed: import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -67,6 +65,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+// Removed: import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -79,14 +78,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource // Ensure this is present
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavHostController
-import com.example.wisdomreminder.R // Ensure R is imported for drawables
+import com.example.wisdomreminder.R
 import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.ui.components.GlassCard
 import com.example.wisdomreminder.ui.main.MainViewModel
@@ -96,6 +95,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -106,6 +106,8 @@ fun WisdomDetailScreen(
     onBackClick: () -> Unit
 ) {
     val mainUiState by viewModel.uiState.collectAsState()
+    // Get reading mode state from ViewModel
+    val isReadingMode by viewModel.isReadingMode.collectAsState()
 
     val categoryWisdomData by produceState<Pair<List<Wisdom>, Int>?>(
         initialValue = null,
@@ -128,7 +130,7 @@ fun WisdomDetailScreen(
             value = if (currentIndex != -1) {
                 Pair(categoryItems, currentIndex)
             } else {
-                Pair(listOf(currentWisdom), 0) // Fallback if not found in filtered list
+                Pair(listOf(currentWisdom), 0)
             }
         } else if (mainUiState is MainViewModel.WisdomUiState.Loading) {
             value = null
@@ -179,7 +181,11 @@ fun WisdomDetailScreen(
 
     LaunchedEffect(initialWisdomId, categoryWisdomList.size, initialPageIndex) {
         if (categoryWisdomList.isNotEmpty() && initialPageIndex != -1 && pagerState.currentPage != initialPageIndex && pagerState.pageCount == categoryWisdomList.size) {
-            pagerState.scrollToPage(initialPageIndex)
+            try {
+                pagerState.scrollToPage(initialPageIndex)
+            } catch (e: Exception) {
+                // Handle or log exception if scroll fails
+            }
         }
     }
 
@@ -195,7 +201,9 @@ fun WisdomDetailScreen(
                 viewModel = viewModel,
                 onBackClick = onBackClick,
                 isFirstInCategory = pageIndex == 0,
-                isLastInCategory = pageIndex == categoryWisdomList.size - 1
+                isLastInCategory = pageIndex == categoryWisdomList.size - 1,
+                isReadingMode = isReadingMode,
+                onToggleReadingMode = { viewModel.toggleReadingMode() } // Call ViewModel's toggle function
             )
         } else {
             Box(modifier = Modifier.fillMaxSize().background(DeepSpace), contentAlignment = Alignment.Center) {
@@ -212,11 +220,12 @@ fun WisdomItemDetailContent(
     viewModel: MainViewModel,
     onBackClick: () -> Unit,
     isFirstInCategory: Boolean,
-    isLastInCategory: Boolean
+    isLastInCategory: Boolean,
+    isReadingMode: Boolean,
+    onToggleReadingMode: () -> Unit
 ) {
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var isReadingMode by remember { mutableStateOf(false) } // State for reading mode
     val scrollState = rememberScrollState()
 
     val topBarAlpha by animateFloatAsState(
@@ -224,10 +233,9 @@ fun WisdomItemDetailContent(
         animationSpec = tween(300), label = "topbar_alpha"
     )
     val contentPaddingTop by animateDpAsState(
-        targetValue = if (isReadingMode) 0.dp else 16.dp, // No padding when top bar is hidden
+        targetValue = if (isReadingMode) 0.dp else 16.dp,
         animationSpec = tween(300), label = "content_padding_top"
     )
-
 
     Box(
         modifier = Modifier
@@ -256,7 +264,7 @@ fun WisdomItemDetailContent(
             containerColor = Color.Transparent,
             contentColor = StarWhite,
             topBar = {
-                if (!isReadingMode) { // Conditionally display TopAppBar
+                if (!isReadingMode) {
                     TopAppBar(
                         modifier = Modifier.alpha(topBarAlpha),
                         title = {
@@ -278,7 +286,7 @@ fun WisdomItemDetailContent(
                             navigationIconContentColor = StarWhite
                         ),
                         actions = {
-                            IconButton(onClick = { isReadingMode = !isReadingMode }) {
+                            IconButton(onClick = onToggleReadingMode) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_menu_book),
                                     contentDescription = "Toggle Reading Mode",
@@ -296,11 +304,10 @@ fun WisdomItemDetailContent(
                 }
             },
             floatingActionButton = {
-                // FAB to exit reading mode or activate wisdom
                 Crossfade(targetState = isReadingMode, animationSpec = tween(500), label = "fab_crossfade") { inReadingMode ->
                     if (inReadingMode) {
                         FloatingActionButton(
-                            onClick = { isReadingMode = false },
+                            onClick = onToggleReadingMode,
                             containerColor = NebulaPurple.copy(alpha = 0.8f),
                             contentColor = StarWhite
                         ) {
@@ -321,11 +328,11 @@ fun WisdomItemDetailContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues) // Use Scaffold's padding
-                    .padding(top = contentPaddingTop) // Add animated top padding
+                    .padding(paddingValues)
+                    .padding(top = contentPaddingTop)
                     .verticalScroll(scrollState)
-                    .padding(horizontal = if (isReadingMode) 24.dp else 16.dp) // More horizontal padding in reading mode
-                    .padding(bottom = 16.dp), // Standard bottom padding
+                    .padding(horizontal = if (isReadingMode) 24.dp else 16.dp)
+                    .padding(bottom = 16.dp),
                 verticalArrangement = if (isReadingMode) Arrangement.Center else Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -388,20 +395,19 @@ fun WisdomItemDetailContent(
                     }
                 }
 
-                // Wisdom Content Card - Always visible, style changes for reading mode
-                Box(modifier = Modifier.fillMaxHeight(if (isReadingMode) 0.8f else 1f)) { // Takes more space in reading mode
+                Box(modifier = Modifier.fillMaxHeight(if (isReadingMode) 0.8f else 1f)) {
                     GlassCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .then(if (isReadingMode) Modifier.fillMaxHeight() else Modifier) // Fill height in reading mode
-                            .padding(vertical = if (isReadingMode) 32.dp else 0.dp) // More vertical padding in reading mode
+                            .then(if (isReadingMode) Modifier.fillMaxHeight() else Modifier)
+                            .padding(vertical = if (isReadingMode) 32.dp else 0.dp)
                     ) {
                         Column(
                             modifier = Modifier
-                                .fillMaxSize() // Fill the card
-                                .padding(if (isReadingMode) 32.dp else 24.dp), // Larger padding in reading mode
+                                .fillMaxSize()
+                                .padding(if (isReadingMode) 32.dp else 24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center // Center content vertically in reading mode
+                            verticalArrangement = Arrangement.Center
                         ) {
                             AnimatedVisibility(visible = !isReadingMode, enter = fadeIn(), exit = fadeOut()) {
                                 Text("WISDOM", style = MaterialTheme.typography.titleMedium, color = NebulaPurple)
@@ -409,7 +415,7 @@ fun WisdomItemDetailContent(
                             Spacer(modifier = Modifier.height(if (isReadingMode) 0.dp else 16.dp))
                             Text(
                                 "\"${wisdom.text}\"",
-                                style = if (isReadingMode) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineLarge, // Larger font in reading mode
+                                style = if (isReadingMode) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineLarge,
                                 color = StarWhite,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
@@ -420,7 +426,7 @@ fun WisdomItemDetailContent(
                                     "— ${wisdom.source}",
                                     style = if (isReadingMode) MaterialTheme.typography.titleMedium.copy(fontStyle = FontStyle.Italic) else MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic),
                                     color = CyberBlue,
-                                    textAlign = TextAlign.Center, // Center source in reading mode
+                                    textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
@@ -428,14 +434,13 @@ fun WisdomItemDetailContent(
                     }
                 }
 
-
                 AnimatedVisibility(visible = !isReadingMode, enter = fadeIn() + slideInVertically(), exit = fadeOut() + slideOutVertically()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { // Wrap remaining cards for animation
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         GlassCard(modifier = Modifier.fillMaxWidth()) {
                             Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
                                 Text("DETAILS", style = MaterialTheme.typography.titleMedium, color = CyberBlue)
                                 Spacer(modifier = Modifier.height(16.dp))
-                                val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' h:mm a") }
+                                val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM dd, uuuu 'at' h:mm a") } // Corrected pattern
                                 DetailRow("Category", wisdom.category, CyberBlue)
                                 DetailRow("Created", wisdom.dateCreated.format(dateFormatter), CyberBlue)
                                 wisdom.startDate?.let { DetailRow("Started", it.format(dateFormatter), CyberBlue) }
@@ -472,7 +477,6 @@ fun WisdomItemDetailContent(
                         }
                     }
                 }
-                // Add spacer only if not in reading mode to push content up slightly
                 AnimatedVisibility(visible = !isReadingMode) {
                     Spacer(modifier = Modifier.height(80.dp))
                 }
