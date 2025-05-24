@@ -1,22 +1,26 @@
-package com.example.wisdomreminder.ui.categories // New package
+package com.example.wisdomreminder.ui.categories
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.Icons // Keep for Icons.Default.Edit
+//import androidx.compose.material.icons.filled.AddCircleOutline // Will be replaced by painterResource
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
+//import androidx.compose.material.icons.filled.DeleteOutline // Will be replaced by painterResource
 import androidx.compose.material.icons.filled.Edit
+//import androidx.compose.material.icons.filled.RemoveCircleOutline // Will be replaced by painterResource
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource // Added for painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import android.widget.Toast
+import com.example.wisdomreminder.R // Added for R.drawable references
 import com.example.wisdomreminder.ui.components.GlassCard
 import com.example.wisdomreminder.ui.main.MainViewModel
 import com.example.wisdomreminder.ui.theme.*
@@ -31,22 +35,26 @@ fun ManageCategoriesScreen(
     val context = LocalContext.current
 
     var categoryToRename by remember { mutableStateOf<String?>(null) }
-    var categoryToDelete by remember { mutableStateOf<String?>(null) }
+    var categoryToClear by remember { mutableStateOf<String?>(null) }
 
-    // Collect events for toasts
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
                 is MainViewModel.UiEvent.CategoryOperationSuccess -> {
                     Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
-                    // Potentially clear dialog states if needed, or rely on recomposition
                     categoryToRename = null
-                    categoryToDelete = null
+                    categoryToClear = null
                 }
                 is MainViewModel.UiEvent.Error -> {
                     Toast.makeText(context, "Error: ${event.message}", Toast.LENGTH_LONG).show()
                 }
-                else -> {} // Other events handled elsewhere or ignored here
+                is MainViewModel.UiEvent.MainScreenExplorerCategoryAdded -> {
+                    Toast.makeText(context, "Category added to Main Screen explorers", Toast.LENGTH_SHORT).show()
+                }
+                is MainViewModel.UiEvent.MainScreenExplorerCategoryRemoved -> {
+                    Toast.makeText(context, "Category removed from Main Screen explorers", Toast.LENGTH_SHORT).show()
+                }
+                else -> {}
             }
         }
     }
@@ -89,16 +97,28 @@ fun ManageCategoriesScreen(
                         )
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            items(state.allCategories.filterNot { it.equals(MainViewModel.DEFAULT_CATEGORY, ignoreCase = true) }
-                                .sorted() // Show non-default categories first, then General
-                                    + (if (state.allCategories.any { it.equals(MainViewModel.DEFAULT_CATEGORY, ignoreCase = true) }) listOf(MainViewModel.DEFAULT_CATEGORY) else emptyList())
+                            items(
+                                state.allCategories
+                                    .filterNot { it.equals(MainViewModel.DEFAULT_CATEGORY, ignoreCase = true) }
+                                    .sorted()
+                                        + (if (state.allCategories.any { it.equals(MainViewModel.DEFAULT_CATEGORY, ignoreCase = true) }) listOf(MainViewModel.DEFAULT_CATEGORY) else emptyList())
                             ) { category ->
                                 val isGeneralCategory = category.equals(MainViewModel.DEFAULT_CATEGORY, ignoreCase = true)
+                                val isSelectedForMainScreenExplorer = state.mainScreenExplorerCategories.contains(category)
+
                                 ManageCategoryItem(
                                     categoryName = category,
                                     onRenameClick = { if (!isGeneralCategory) categoryToRename = category },
-                                    onDeleteClick = { if (!isGeneralCategory) categoryToDelete = category },
-                                    isGeneral = isGeneralCategory
+                                    onClearCategoryClick = { if (!isGeneralCategory) categoryToClear = category },
+                                    isGeneral = isGeneralCategory,
+                                    isSelectedForMainScreenExplorer = isSelectedForMainScreenExplorer,
+                                    onToggleMainScreenExplorerClick = {
+                                        if (isSelectedForMainScreenExplorer) {
+                                            viewModel.removeCategoryFromMainScreenExplorers(category)
+                                        } else {
+                                            viewModel.addCategoryToMainScreenExplorers(category)
+                                        }
+                                    }
                                 )
                             }
                         }
@@ -117,19 +137,17 @@ fun ManageCategoriesScreen(
             onDismiss = { categoryToRename = null },
             onSave = { oldName, newName ->
                 viewModel.renameWisdomCategory(oldName, newName)
-                categoryToRename = null // Dialog will be dismissed by this state change
             }
         )
     }
 
-    if (categoryToDelete != null) {
+    if (categoryToClear != null) {
         DeleteCategoryConfirmationDialog(
-            categoryName = categoryToDelete!!,
+            categoryName = categoryToClear!!,
             onConfirm = {
-                viewModel.clearWisdomCategory(it) // Reassigns items to "General"
-                categoryToDelete = null
+                viewModel.clearWisdomCategory(it)
             },
-            onDismiss = { categoryToDelete = null }
+            onDismiss = { categoryToClear = null }
         )
     }
 }
@@ -137,17 +155,18 @@ fun ManageCategoriesScreen(
 @Composable
 fun ManageCategoryItem(
     categoryName: String,
+    isGeneral: Boolean,
+    isSelectedForMainScreenExplorer: Boolean,
     onRenameClick: () -> Unit,
-    onDeleteClick: () -> Unit,
-    isGeneral: Boolean
+    onClearCategoryClick: () -> Unit,
+    onToggleMainScreenExplorerClick: () -> Unit
 ) {
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = categoryName,
@@ -155,15 +174,31 @@ fun ManageCategoryItem(
                 color = StarWhite,
                 modifier = Modifier.weight(1f)
             )
-            if (!isGeneral) { // "General" category cannot be renamed or deleted from here
-                Row {
-                    IconButton(onClick = onRenameClick) {
-                        Icon(Icons.Default.Edit, "Rename Category", tint = CyberBlue)
-                    }
-                    IconButton(onClick = onDeleteClick) {
-                        Icon(Icons.Default.Delete, "Delete Category", tint = NeonPink)
-                    }
+
+            IconButton(onClick = onToggleMainScreenExplorerClick) {
+                Icon(
+                    painter = if (isSelectedForMainScreenExplorer)
+                        painterResource(id = R.drawable.ic_remove_circle_outline)
+                    else
+                        painterResource(id = R.drawable.ic_add_circle_outline),
+                    contentDescription = if (isSelectedForMainScreenExplorer) "Remove from Main Screen Explorers" else "Add to Main Screen Explorers",
+                    tint = if (isSelectedForMainScreenExplorer) NeonPink.copy(alpha = 0.8f) else ElectricGreen.copy(alpha = 0.8f)
+                )
+            }
+
+            if (!isGeneral) {
+                IconButton(onClick = onRenameClick, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Default.Edit, "Rename Category", tint = CyberBlue)
                 }
+                IconButton(onClick = onClearCategoryClick, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_delete_outline),
+                        contentDescription = "Clear Category (move items to General)",
+                        tint = AccentOrange
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.width(80.dp))
             }
         }
     }
@@ -209,7 +244,7 @@ fun RenameCategoryDialog(
                     } else if (newCategoryName.isBlank()){
                         Toast.makeText(context, "Category name cannot be empty.", Toast.LENGTH_SHORT).show()
                     } else {
-                        onDismiss() // Same name, just dismiss
+                        onDismiss()
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = NebulaPurple)
