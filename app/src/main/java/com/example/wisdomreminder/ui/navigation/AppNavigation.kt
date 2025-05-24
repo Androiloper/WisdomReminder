@@ -100,8 +100,8 @@ fun AppNavigation(
         ) { backStackEntry ->
             val wisdomIdArg = backStackEntry.arguments?.getLong("wisdomId") ?: -1L // Extracted argument
             WisdomDetailScreen(
-                navController = navController, // Passed navController
-                initialWisdomId = wisdomIdArg,  // Corrected parameter name
+                // navController = navController, // REMOVED this line
+                initialWisdomId = wisdomIdArg,
                 viewModel = mainViewModel,
                 onBackClick = { navController.popBackStack() }
             )

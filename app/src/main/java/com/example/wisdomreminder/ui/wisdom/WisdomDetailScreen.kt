@@ -2,6 +2,7 @@ package com.example.wisdomreminder.ui.wisdom
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+// import androidx.compose.animation.Crossfade // Removed for now, page-level alpha will handle fade
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -28,12 +29,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+//import androidx.compose.foundation.pager.getOffsetFractionForPage // Import for page offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack // Keep for TopAppBar
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
@@ -61,11 +64,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-// Removed: import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -77,6 +80,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer // Import for alpha and other transformations
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
@@ -96,41 +100,42 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
+import kotlin.math.abs // For absolute value of offset
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun WisdomDetailScreen(
-    navController: NavHostController,
     initialWisdomId: Long,
     viewModel: MainViewModel,
     onBackClick: () -> Unit
 ) {
     val mainUiState by viewModel.uiState.collectAsState()
-    // Get reading mode state from ViewModel
     val isReadingMode by viewModel.isReadingMode.collectAsState()
+
+    var currentDisplayedWisdom by remember { mutableStateOf<Wisdom?>(null) }
 
     val categoryWisdomData by produceState<Pair<List<Wisdom>, Int>?>(
         initialValue = null,
         key1 = initialWisdomId,
         key2 = mainUiState
     ) {
-        val currentWisdom = when (val state = mainUiState) {
+        val initialWisdom = when (val state = mainUiState) {
             is MainViewModel.WisdomUiState.Success -> state.allWisdomFlatList.find { it.id == initialWisdomId }
             else -> null
         }
 
-        if (currentWisdom != null) {
+        if (initialWisdom != null) {
             val categoryItems = when (val state = mainUiState) {
                 is MainViewModel.WisdomUiState.Success -> state.allWisdomFlatList
-                    .filter { it.category.equals(currentWisdom.category, ignoreCase = true) }
+                    .filter { it.category.equals(initialWisdom.category, ignoreCase = true) }
                     .sortedWith(compareBy({ it.orderIndex }, { it.dateCreated }))
                 else -> emptyList()
             }
-            val currentIndex = categoryItems.indexOfFirst { it.id == initialWisdomId }
-            value = if (currentIndex != -1) {
-                Pair(categoryItems, currentIndex)
+            val currentIndexInList = categoryItems.indexOfFirst { it.id == initialWisdomId }
+            value = if (currentIndexInList != -1) {
+                Pair(categoryItems, currentIndexInList)
             } else {
-                Pair(listOf(currentWisdom), 0)
+                Pair(listOf(initialWisdom), 0)
             }
         } else if (mainUiState is MainViewModel.WisdomUiState.Loading) {
             value = null
@@ -147,46 +152,48 @@ fun WisdomDetailScreen(
         return
     }
 
-    val (categoryWisdomList, initialPageIndex) = categoryWisdomData!!
+    val (categoryWisdomList, initialPageIndexInList) = categoryWisdomData!!
 
-    if (categoryWisdomList.isEmpty() || initialPageIndex < 0 || initialPageIndex >= categoryWisdomList.size) {
+    if (categoryWisdomList.isEmpty() || initialPageIndexInList < 0 || initialPageIndexInList >= categoryWisdomList.size) {
         Box(modifier = Modifier.fillMaxSize().background(DeepSpace), contentAlignment = Alignment.Center) {
-            Text("Wisdom item not found in its category.", color = NeonPink, style = MaterialTheme.typography.bodyLarge)
+            Text("Wisdom item not found in its category or list is empty.", color = NeonPink, style = MaterialTheme.typography.bodyLarge)
         }
         return
     }
 
     val pagerState = rememberPagerState(
-        initialPage = initialPageIndex,
+        initialPage = initialPageIndexInList,
         pageCount = { categoryWisdomList.size }
     )
 
-    LaunchedEffect(pagerState, categoryWisdomList, initialWisdomId) {
+    LaunchedEffect(pagerState, categoryWisdomList) {
         snapshotFlow { pagerState.settledPage }
             .distinctUntilChanged()
             .collectLatest { settledPage ->
-                if (categoryWisdomList.isNotEmpty() && settledPage < categoryWisdomList.size) {
-                    val newWisdomId = categoryWisdomList[settledPage].id
-                    if (newWisdomId != initialWisdomId) {
-                        navController.navigate(Screen.WisdomDetail.createRoute(newWisdomId)) {
-                            popUpTo(Screen.WisdomDetail.route) {
-                                inclusive = true; saveState = false
-                            }
-                            launchSingleTop = true; restoreState = false
-                        }
-                    }
+                if (settledPage >= 0 && settledPage < categoryWisdomList.size) {
+                    currentDisplayedWisdom = categoryWisdomList[settledPage]
                 }
             }
     }
 
-    LaunchedEffect(initialWisdomId, categoryWisdomList.size, initialPageIndex) {
-        if (categoryWisdomList.isNotEmpty() && initialPageIndex != -1 && pagerState.currentPage != initialPageIndex && pagerState.pageCount == categoryWisdomList.size) {
-            try {
-                pagerState.scrollToPage(initialPageIndex)
-            } catch (e: Exception) {
-                // Handle or log exception if scroll fails
+    LaunchedEffect(initialPageIndexInList, categoryWisdomList) {
+        if (initialPageIndexInList >= 0 && initialPageIndexInList < categoryWisdomList.size) {
+            currentDisplayedWisdom = categoryWisdomList[initialPageIndexInList]
+            if (pagerState.currentPage != initialPageIndexInList && pagerState.pageCount == categoryWisdomList.size) {
+                try {
+                    pagerState.scrollToPage(initialPageIndexInList)
+                } catch (e: Exception) { /* Handle or log */ }
             }
         }
+    }
+
+    val wisdomToDisplay = currentDisplayedWisdom ?: categoryWisdomList.getOrNull(pagerState.currentPage) ?: categoryWisdomList.getOrNull(initialPageIndexInList)
+
+    if (wisdomToDisplay == null) {
+        Box(modifier = Modifier.fillMaxSize().background(DeepSpace), contentAlignment = Alignment.Center) {
+            Text("Loading wisdom...", color = StarWhite)
+        }
+        return
     }
 
     HorizontalPager(
@@ -194,20 +201,26 @@ fun WisdomDetailScreen(
         modifier = Modifier.fillMaxSize(),
         key = { pageIndex -> categoryWisdomList[pageIndex].id }
     ) { pageIndex ->
+        val pageOffset = pagerState.getOffsetFractionForPage(pageIndex)
+        val pageAlpha = 1f - abs(pageOffset) // Fade out as it moves away from center
+
         if (pageIndex >= 0 && pageIndex < categoryWisdomList.size) {
-            val currentWisdomInPager = categoryWisdomList[pageIndex]
-            WisdomItemDetailContent(
-                wisdom = currentWisdomInPager,
-                viewModel = viewModel,
-                onBackClick = onBackClick,
-                isFirstInCategory = pageIndex == 0,
-                isLastInCategory = pageIndex == categoryWisdomList.size - 1,
-                isReadingMode = isReadingMode,
-                onToggleReadingMode = { viewModel.toggleReadingMode() } // Call ViewModel's toggle function
-            )
+            // Apply graphicsLayer to the item content of the pager
+            Box(modifier = Modifier.graphicsLayer { alpha = pageAlpha }) {
+                WisdomItemDetailContent(
+                    wisdom = categoryWisdomList[pageIndex], // Use the wisdom for *this* page
+                    viewModel = viewModel,
+                    onBackClick = onBackClick,
+                    isFirstInCategory = pageIndex == 0,
+                    isLastInCategory = pageIndex == categoryWisdomList.size - 1,
+                    isReadingMode = isReadingMode,
+                    onToggleReadingMode = { viewModel.toggleReadingMode() }
+                )
+            }
         } else {
-            Box(modifier = Modifier.fillMaxSize().background(DeepSpace), contentAlignment = Alignment.Center) {
-                Text("Error loading wisdom for this page.", color = NeonPink)
+            // Placeholder for safety, though should not be reached with current logic
+            Box(modifier = Modifier.fillMaxSize().background(DeepSpace.copy(alpha = pageAlpha)), contentAlignment = Alignment.Center) {
+                Text("Invalid page index.", color = NeonPink)
             }
         }
     }
@@ -240,8 +253,8 @@ fun WisdomItemDetailContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DeepSpace)
-            .drawBehind {
+            .background(DeepSpace) // This background will be visible as pages fade
+            .drawBehind { // Stars drawn on the base Box, not per page
                 drawRect(brush = Brush.verticalGradient(colors = listOf(CosmicBlack, DeepSpace)))
                 for (i in 0..100) {
                     val x = (Math.random() * size.width).toFloat()
@@ -252,6 +265,7 @@ fun WisdomItemDetailContent(
                 }
             }
     ) {
+        // Background image, also part of the page content that will fade
         Image(
             painter = painterResource(id = R.drawable.ic_wisdom),
             contentDescription = null,
@@ -261,7 +275,7 @@ fun WisdomItemDetailContent(
 
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = Color.Transparent,
+            containerColor = Color.Transparent, // Scaffold is transparent to let page alpha control visibility
             contentColor = StarWhite,
             topBar = {
                 if (!isReadingMode) {
@@ -281,7 +295,7 @@ fun WisdomItemDetailContent(
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = GlassSurface.copy(alpha = 0.5f),
+                            containerColor = GlassSurface.copy(alpha = 0.5f * topBarAlpha), // Fade TopAppBar background too
                             titleContentColor = StarWhite,
                             navigationIconContentColor = StarWhite
                         ),
@@ -395,7 +409,7 @@ fun WisdomItemDetailContent(
                     }
                 }
 
-                Box(modifier = Modifier.fillMaxHeight(if (isReadingMode) 0.8f else 1f)) {
+                Box(modifier = Modifier.fillMaxHeight(if (isReadingMode) 0.9f else 1f)) {
                     GlassCard(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -413,15 +427,16 @@ fun WisdomItemDetailContent(
                                 Text("WISDOM", style = MaterialTheme.typography.titleMedium, color = NebulaPurple)
                             }
                             Spacer(modifier = Modifier.height(if (isReadingMode) 0.dp else 16.dp))
-                            Text(
+
+                            Text( // No Crossfade here, page alpha handles it
                                 "\"${wisdom.text}\"",
                                 style = if (isReadingMode) MaterialTheme.typography.displaySmall else MaterialTheme.typography.headlineLarge,
                                 color = StarWhite,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            Spacer(modifier = Modifier.height(if (isReadingMode) 16.dp else 16.dp))
-                            if (wisdom.source.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            if (wisdom.source.isNotBlank()) { // No Crossfade here
                                 Text(
                                     "— ${wisdom.source}",
                                     style = if (isReadingMode) MaterialTheme.typography.titleMedium.copy(fontStyle = FontStyle.Italic) else MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic),
@@ -440,7 +455,7 @@ fun WisdomItemDetailContent(
                             Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
                                 Text("DETAILS", style = MaterialTheme.typography.titleMedium, color = CyberBlue)
                                 Spacer(modifier = Modifier.height(16.dp))
-                                val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM dd, uuuu 'at' h:mm a") } // Corrected pattern
+                                val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM dd, uuuu 'at' h:mm a") }
                                 DetailRow("Category", wisdom.category, CyberBlue)
                                 DetailRow("Created", wisdom.dateCreated.format(dateFormatter), CyberBlue)
                                 wisdom.startDate?.let { DetailRow("Started", it.format(dateFormatter), CyberBlue) }
