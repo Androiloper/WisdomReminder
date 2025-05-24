@@ -35,38 +35,7 @@ import com.example.wisdomreminder.ui.theme.*
 import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
 import androidx.compose.material.icons.filled.Info // style
 import androidx.compose.material.icons.filled.List // Import List icon
-import com.example.wisdomreminder.ui.navigation.Screen
-
-// ... other imports remain the same ...
-
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.drawBehind
-
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-
-import androidx.compose.ui.unit.dp
-
-
-import com.example.wisdomreminder.ui.components.*
-import com.example.wisdomreminder.ui.theme.*
-import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
+// import com.example.wisdomreminder.ui.navigation.Screen // Not directly used here
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,7 +52,8 @@ fun MainScreen(
     val scrollState = rememberScrollState()
     val localTAG = "MainScreen"
 
-    var selectedCategoryForExplorer by remember { mutableStateOf<String?>(null) }
+    // No longer needed here, will come from viewModel.uiState
+    // var selectedCategoryForExplorer by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -207,7 +177,6 @@ fun MainScreen(
                             StatCard("COMPLETED", state.completedCount.toString(), Icons.Default.PlayArrow, CyberBlue, Modifier.weight(1f))
                         }
 
-                        // ** THIS IS THE CORRECTED PART for MainScreen.kt **
                         val allWisdomItems = remember(
                             state.activeWisdom,
                             state.otherQueuedWisdom,
@@ -220,7 +189,7 @@ fun MainScreen(
                                     state.favoriteQueuedWisdom +
                                     state.sevenWisdomPlaylist +
                                     state.completedWisdom
-                                    ).distinctBy { it.id } // Ensure uniqueness if items overlap
+                                    ).distinctBy { it.id }
                         }
 
                         if (allWisdomItems.isNotEmpty()) {
@@ -238,10 +207,12 @@ fun MainScreen(
                         )
                         CategoryExplorerCard(
                             allWisdom = allWisdomItems,
-                            selectedCategory = selectedCategoryForExplorer,
+                            selectedCategory = state.selectedExplorerCategory, // Use from ViewModel
                             allCategories = state.allCategories,
                             onWisdomClick = onWisdomClick,
-                            onCategorySelected = { category -> selectedCategoryForExplorer = category }
+                            onCategorySelected = { category ->
+                                viewModel.setSelectedExplorerCategory(category) // Update ViewModel
+                            }
                         )
 
                         Text(
