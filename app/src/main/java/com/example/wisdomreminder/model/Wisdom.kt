@@ -24,6 +24,7 @@ data class Wisdom(
 
     // Additional features
     val isFavorite: Boolean = false,
+    val orderIndex: Int = 0, // New field for ordering in queues/playlists
     val backgroundColor: String? = null,   // Optional color for display
     val fontStyle: String? = null,         // Optional font customization
     val imageBackground: String? = null    // Optional path to background image

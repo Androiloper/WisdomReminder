@@ -45,7 +45,7 @@ class WisdomRepository @Inject constructor(
             Log.d(TAG, "Successfully added wisdom with ID: $id")
             if (BuildConfig.DEBUG) {
                 val addedItem = wisdomDao.getWisdomById(id)
-                Log.d(TAG, "Verification - Added wisdom: ${addedItem?.text}, isActive=${addedItem?.isActive}")
+                Log.d(TAG, "Verification - Added wisdom: ${addedItem?.text}, isActive=${addedItem?.isActive}, isFavorite=${addedItem?.isFavorite}, orderIndex=${addedItem?.orderIndex}")
             }
             Result.success(id)
         } catch (e: Exception) {
@@ -80,8 +80,8 @@ class WisdomRepository @Inject constructor(
         wisdomDao.getActiveWisdom()
             .mapToWisdomListAndCatch("Error getting active wisdom", TAG)
 
-    override fun getQueuedWisdom(): Flow<List<Wisdom>> =
-        wisdomDao.getQueuedWisdom()
+    override fun getStrictlyQueuedWisdom(): Flow<List<Wisdom>> =
+        wisdomDao.getStrictlyQueuedWisdom()
             .onEach { entities ->
                 if (BuildConfig.DEBUG) Log.d(TAG, "Mapping ${entities.size} queued wisdom entities")
             }
@@ -89,6 +89,11 @@ class WisdomRepository @Inject constructor(
             .onEach { wisdom ->
                 if (BuildConfig.DEBUG) Log.d(TAG, "Emitting ${wisdom.size} queued wisdom items")
             }
+
+    override fun getFavoriteDisplayableWisdom(): Flow<List<Wisdom>> =
+        wisdomDao.getFavoriteDisplayableWisdom()
+            .mapToWisdomListAndCatch("Error getting favorite queued wisdom", TAG)
+
 
     override fun getCompletedWisdom(): Flow<List<Wisdom>> =
         wisdomDao.getCompletedWisdom()
@@ -140,7 +145,7 @@ class WisdomRepository @Inject constructor(
                         startDate = LocalDateTime.now(),
                         currentDay = 1,
                         exposuresToday = 0,
-                        exposuresTotal = 0, // Reset total exposures on re-activation as well
+                        exposuresTotal = 0,
                         dateCompleted = null
                     )
                     wisdomDao.updateWisdom(updatedWisdom)
@@ -161,6 +166,16 @@ class WisdomRepository @Inject constructor(
         }
     }
 
+    override suspend fun updateFavoriteStatus(wisdomId: Long, isFavorite: Boolean): Result<Boolean> { // New
+        return try {
+            wisdomDao.updateFavoriteStatus(wisdomId, isFavorite)
+            Result.success(true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating favorite status for wisdom: $wisdomId", e)
+            Result.failure(e)
+        }
+    }
+
     override suspend fun getActiveWisdomDirect(): Result<List<Wisdom>> {
         return try {
             val activeEntities = wisdomDao.getActiveWisdomDirectly()
@@ -176,13 +191,13 @@ class WisdomRepository @Inject constructor(
         wisdomDao.searchWisdom(query)
             .mapToWisdomListAndCatch("Error searching wisdom with query: $query", TAG)
 
-    override fun getWisdomByCategory(category: String): Flow<List<Wisdom>> =
-        wisdomDao.getWisdomByCategory(category)
+    override fun getDisplayableWisdomByCategory(category: String): Flow<List<Wisdom>> =
+        wisdomDao.getDisplayableWisdomByCategory(category)
             .mapToWisdomListAndCatch("Error getting wisdom for category: $category", TAG)
 
     override fun getAllCategories(): Flow<List<String>> =
         wisdomDao.getAllCategories()
-            .map { categories -> categories.filter { it.isNotBlank() } } // Filter out blank categories
+            .map { categories -> categories.filter { it.isNotBlank() } }
             .catch { e ->
                 Log.e(TAG, "Error getting all categories", e)
                 emit(emptyList())
@@ -205,16 +220,13 @@ class WisdomRepository @Inject constructor(
         wisdomDao.getCompletedCount()
             .mapToCountAndCatch("Error getting completed wisdom count", TAG)
 
-    // --- Implementations for new category management methods ---
     @Transaction
     override suspend fun renameCategory(oldName: String, newName: String): Result<Int> {
         return try {
             if (oldName.equals(newName, ignoreCase = true)) {
                 Log.d(TAG, "RenameCategory: Old and new names are the same ('$oldName'). No action needed.")
-                return Result.success(0) // No rows updated
+                return Result.success(0)
             }
-            // Optional: Check if newName already exists and handle (e.g., merge or prevent)
-            // For now, we'll just update.
             val rowsAffected = wisdomDao.updateCategoryName(oldName, newName)
             Log.d(TAG, "Renamed category from '$oldName' to '$newName'. $rowsAffected items updated.")
             Result.success(rowsAffected)

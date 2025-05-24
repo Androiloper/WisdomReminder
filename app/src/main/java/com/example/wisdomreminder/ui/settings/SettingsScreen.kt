@@ -22,9 +22,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.rounded.Notifications // Using rounded icon for consistency
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.Face // Using Face for Alarms icon
+import androidx.compose.material.icons.rounded.Face
+import androidx.compose.material.icons.rounded.Info // For unlock screen setting
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -70,10 +71,14 @@ fun SettingsScreen(
     val morningAlarmTime by viewModel.morningAlarmTime.collectAsState()
     val eveningAlarmEnabled by viewModel.eveningAlarmEnabled.collectAsState()
     val eveningAlarmTime by viewModel.eveningAlarmTime.collectAsState()
+    val unlockScreenDisplayMode by viewModel.unlockScreenDisplayMode.collectAsState()
+
 
     var showTimePickerDialog by remember { mutableStateOf(false) }
-    var timePickerMode by remember { mutableStateOf("morning") } // "morning" or "evening"
+    var timePickerMode by remember { mutableStateOf("morning") }
     var showPermissionDialog by remember { mutableStateOf(false) }
+    var showUnlockModeDialog by remember { mutableStateOf(false) }
+
 
     val handleAlarmToggle: (Boolean) -> Unit = { isEnabled ->
         viewModel.setAlarmsEnabled(isEnabled)
@@ -87,7 +92,7 @@ fun SettingsScreen(
     LaunchedEffect(alarmsEnabled, morningAlarmEnabled, eveningAlarmEnabled, context) {
         if (alarmsEnabled && (morningAlarmEnabled || eveningAlarmEnabled) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (!hasExactAlarmPermission(context)) {
-                // This could be a place to show a non-blocking reminder if permission is still needed
+                // Reminder if permission is still needed
             }
         }
     }
@@ -120,7 +125,7 @@ fun SettingsScreen(
             contentColor = StarWhite,
             topBar = {
                 TopAppBar(
-                    title = { Text("SETTINGS", style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold)) },
+                    title = { Text("SETTINGS", style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold), color = StarWhite) },
                     navigationIcon = {
                         IconButton(onClick = onBackClick) {
                             Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = StarWhite)
@@ -144,7 +149,7 @@ fun SettingsScreen(
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
 
-                SectionHeader(title = "NOTIFICATION SETTINGS")
+                SectionHeader(title = "GENERAL NOTIFICATIONS")
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         FuturisticToggle(
@@ -157,25 +162,25 @@ fun SettingsScreen(
                             Text(
                                 "Regular notifications will show wisdom throughout the day.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = StarWhite.copy(alpha = 0.7f),
-                                modifier = Modifier.padding(start = 40.dp) // Aligned with icon space
+                                color = StarWhite.copy(alpha = 0.7f), // Explicit color
+                                modifier = Modifier.padding(start = 40.dp)
                             )
                         }
                     }
                 }
 
-                SectionHeader(title = "DAILY REMINDERS")
+                SectionHeader(title = "DAILY REMINDER ALARMS")
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         FuturisticToggle(
                             text = "Daily Wisdom Alarms",
                             isChecked = alarmsEnabled,
                             onCheckedChange = handleAlarmToggle,
-                            icon = Icons.Rounded.Face // Using Face icon
+                            icon = Icons.Rounded.Face
                         )
                         if (alarmsEnabled) {
                             Divider(color = GlassSurfaceLight, modifier = Modifier.padding(vertical = 8.dp))
-                            AlarmTimeSetting(
+                            AlarmTimeSetting( // Line 153 error might be related to Text inside this
                                 label = "Morning Reflection",
                                 isEnabled = morningAlarmEnabled,
                                 time = morningAlarmTime,
@@ -185,7 +190,7 @@ fun SettingsScreen(
                                     showTimePickerDialog = true
                                 }
                             )
-                            AlarmTimeSetting(
+                            AlarmTimeSetting( // Line 173 error might be related to Text inside this
                                 label = "Evening Reflection",
                                 isEnabled = eveningAlarmEnabled,
                                 time = eveningAlarmTime,
@@ -198,14 +203,42 @@ fun SettingsScreen(
                             Text(
                                 "High-priority notification alarms at set times for daily reflection.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = StarWhite.copy(alpha = 0.7f),
+                                color = StarWhite.copy(alpha = 0.7f), // Explicit color
                                 modifier = Modifier.padding(start = 12.dp, top = 8.dp)
                             )
                         }
                     }
                 }
 
-                SectionHeader(title = "ABOUT")
+                SectionHeader(title = "UNLOCK SCREEN DISPLAY") // Approx Line 190
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        SettingItem(
+                            icon = Icons.Rounded.Info,
+                            title = "Wisdom on Unlock",
+                            subtitle = "Choose what wisdom appears when you unlock your phone.",
+                            onClick = { showUnlockModeDialog = true }
+                        ) {
+                            Text(
+                                text = when (unlockScreenDisplayMode) {
+                                    UnlockScreenDisplayMode.ACTIVE_WISDOM -> "Active Wisdom"
+                                    UnlockScreenDisplayMode.QUEUED_PLAYLIST -> "Queued Playlist"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ElectricGreen // Explicit color
+                            )
+                        }
+                        Text(
+                            "Note: 'Queued Playlist' functionality is conceptual and will pick random active wisdom for now. Full playlist selection will be added later.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = StarWhite.copy(alpha = 0.6f), // Explicit color
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+
+
+                SectionHeader(title = "ABOUT") // Approx Line 208
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -213,10 +246,10 @@ fun SettingsScreen(
                     ) {
                         Text("Wisdom Reminder v1.0", style = MaterialTheme.typography.titleMedium, color = ElectricGreen)
                         Text("The 21/21 Rule", style = MaterialTheme.typography.titleSmall, color = StarWhite)
-                        Text(
+                        Text( // Approx Line 215 error
                             "Internalizing wisdom through repetition: expose yourself to the same piece of wisdom 21 times over 21 days to make it a part of your thinking.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = StarWhite.copy(alpha = 0.8f)
+                            color = StarWhite.copy(alpha = 0.8f) // Explicit color
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -224,19 +257,18 @@ fun SettingsScreen(
                         ) {
                             Button(
                                 onClick = {
-                                    // Placeholder for About Dialog or Screen
                                     Toast.makeText(context, "More info coming soon!", Toast.LENGTH_SHORT).show()
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = CyberBlue)
                             ) {
                                 Icon(Icons.Rounded.Info, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("MORE INFO")
+                                Text("MORE INFO", color = LocalContentColor.current) // Use LocalContentColor for Button Text
                             }
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(24.dp)) // Bottom padding
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
 
@@ -279,7 +311,7 @@ fun SettingsScreen(
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = NebulaPurple)
-                    ) { Text("Open Settings") }
+                    ) { Text("Open Settings", color = StarWhite) }
                 },
                 dismissButton = {
                     TextButton(onClick = { showPermissionDialog = false }) {
@@ -290,16 +322,116 @@ fun SettingsScreen(
                 tonalElevation = 12.dp
             )
         }
+        if (showUnlockModeDialog) {
+            UnlockScreenModeDialog( // Approx Line 243 error might be related to Text inside this
+                currentMode = unlockScreenDisplayMode,
+                onModeSelected = {
+                    viewModel.setUnlockScreenDisplayMode(it)
+                    showUnlockModeDialog = false
+                },
+                onDismiss = { showUnlockModeDialog = false }
+            )
+        }
     }
 }
 
 @Composable
-fun SectionHeader(title: String) {
+fun SectionHeader(title: String) { // This was fine, no changes needed based on error
     Text(
         text = title,
         style = MaterialTheme.typography.titleLarge,
         color = NeonPink,
         modifier = Modifier.padding(vertical = 8.dp)
+    )
+}
+
+@Composable
+fun SettingItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    onClick: (() -> Unit)? = null,
+    trailingContent: (@Composable () -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(
+                    brush = Brush.radialGradient(colors = listOf(NebulaPurple.copy(alpha = 0.15f), Color.Transparent)),
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = title, tint = NebulaPurple, modifier = Modifier.size(20.dp))
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = MaterialTheme.typography.bodyLarge, color = StarWhite) // Explicit color
+            if (subtitle != null) {
+                Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = StarWhite.copy(alpha = 0.7f)) // Explicit color
+            }
+        }
+        if (trailingContent != null) {
+            Spacer(modifier = Modifier.width(16.dp))
+            trailingContent()
+        }
+    }
+}
+
+
+@Composable
+fun UnlockScreenModeDialog(
+    currentMode: UnlockScreenDisplayMode,
+    onModeSelected: (UnlockScreenDisplayMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Unlock Screen Display", color = ElectricGreen) },
+        text = {
+            Column {
+                Text("Choose which wisdom to display when you unlock your phone:", color = StarWhite) // Explicit color
+                Spacer(Modifier.height(16.dp))
+                UnlockScreenDisplayMode.values().forEach { mode ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onModeSelected(mode) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = (mode == currentMode),
+                            onClick = { onModeSelected(mode) },
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = ElectricGreen,
+                                unselectedColor = StarWhite.copy(alpha = 0.7f)
+                            )
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text( // Error was around here (line 243 in previous version)
+                            text = when (mode) {
+                                UnlockScreenDisplayMode.ACTIVE_WISDOM -> "Currently Active Wisdom"
+                                UnlockScreenDisplayMode.QUEUED_PLAYLIST -> "Wisdom from Queue (Playlist)"
+                            },
+                            color = StarWhite // Explicit color
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("CLOSE", color = StarWhite.copy(alpha = 0.7f)) }
+        },
+        containerColor = GlassSurfaceDark
     )
 }
 
@@ -311,7 +443,7 @@ fun FuturisticToggle(
     icon: ImageVector
 ) {
     val scale by animateFloatAsState(
-        targetValue = if (isChecked) 1.0f else 1f, // Subtle or no scale effect if preferred
+        targetValue = if (isChecked) 1.0f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
@@ -325,13 +457,13 @@ fun FuturisticToggle(
             .scale(scale)
             .clip(MaterialTheme.shapes.medium)
             .background(GlassSurface.copy(alpha = if (isChecked) 0.6f else 0.3f))
-            .clickable { onCheckedChange(!isChecked) } // Entire row is clickable
+            .clickable { onCheckedChange(!isChecked) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp) // Slightly larger icon box
+                .size(36.dp)
                 .background(
                     brush = Brush.radialGradient(
                         colors = listOf(
@@ -345,7 +477,7 @@ fun FuturisticToggle(
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = text, // Better for accessibility
+                contentDescription = text,
                 tint = if (isChecked) ElectricGreen else MoonGray,
                 modifier = Modifier.size(20.dp)
             )
@@ -355,11 +487,11 @@ fun FuturisticToggle(
             text = text,
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
-            color = StarWhite
+            color = StarWhite // Explicit color
         )
         Switch(
             checked = isChecked,
-            onCheckedChange = onCheckedChange, // This will be called by the Row's clickable
+            onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = NebulaPurple,
                 checkedTrackColor = ElectricGreen.copy(alpha = 0.4f),
@@ -385,7 +517,7 @@ fun AlarmTimeSetting(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(vertical = 8.dp), // Approx line 145-150
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(
@@ -398,27 +530,27 @@ fun AlarmTimeSetting(
                 )
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text(label, style = MaterialTheme.typography.bodyLarge, color = StarWhite, modifier = Modifier.weight(1f))
+            Text(label, style = MaterialTheme.typography.bodyLarge, color = StarWhite, modifier = Modifier.weight(1f)) // Line ~153 (Error Reported Here)
 
             if (isEnabled) {
-                Button(
+                Button( // Line ~157
                     onClick = onTimeClick,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = ElectricGreen.copy(alpha = 0.2f),
-                        contentColor = ElectricGreen
+                        contentColor = ElectricGreen // This is the key for Text color
                     ),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
-                    Text(time, style = MaterialTheme.typography.bodyMedium)
+                    Text(time, style = MaterialTheme.typography.bodyMedium, color = ElectricGreen) // Explicitly set color
                 }
             }
         }
         if (isEnabled) {
-            Text(
+            Text( // Line ~172-173 (Error Reported Here)
                 "Daily alarm set for $time",
                 style = MaterialTheme.typography.bodySmall,
                 color = StarWhite.copy(alpha = 0.7f),
-                modifier = Modifier.padding(start = 48.dp) // Align with Checkbox text start
+                modifier = Modifier.padding(start = 48.dp)
             )
         }
     }
@@ -466,13 +598,13 @@ fun TimePickerDialog(
                     modifier = Modifier.padding(top = 16.dp, bottom = 24.dp)
                 )
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = StarWhite.copy(alpha = 0.7f))) { Text("CANCEL") }
+                    TextButton(onClick = onDismiss, colors = ButtonDefaults.textButtonColors(contentColor = StarWhite.copy(alpha = 0.7f))) { Text("CANCEL", color = StarWhite.copy(alpha = 0.7f)) }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = { onTimeSelected(hour, minute) },
                         colors = ButtonDefaults.buttonColors(containerColor = NebulaPurple),
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
-                    ) { Text("SET") }
+                    ) { Text("SET", color = StarWhite) }
                 }
             }
         }
@@ -506,7 +638,7 @@ private fun parseTimeString(timeString: String): Pair<Int, Int> {
     return try {
         val parts = timeString.split(":")
         Pair(parts[0].toInt(), parts[1].toInt())
-    } catch (e: Exception) { Pair(8, 0) } // Default to 8:00 AM on error
+    } catch (e: Exception) { Pair(8, 0) }
 }
 
 private fun formatTimeString(hour: Int, minute: Int): String {
@@ -514,9 +646,9 @@ private fun formatTimeString(hour: Int, minute: Int): String {
 }
 
 private fun formatTimeDisplay(hour: Int, minute: Int): String {
-    val amPm = if (hour < 12 || hour == 24) "AM" else "PM" // 24 is 12 AM
+    val amPm = if (hour < 12 || hour == 24) "AM" else "PM"
     val displayHour = when {
-        hour == 0 || hour == 12 -> 12 // 00:xx is 12:xx AM, 12:xx is 12:xx PM
+        hour == 0 || hour == 12 -> 12
         hour > 12 -> hour - 12
         else -> hour
     }

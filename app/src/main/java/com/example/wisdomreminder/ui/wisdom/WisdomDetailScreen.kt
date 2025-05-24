@@ -83,6 +83,7 @@ import com.example.wisdomreminder.ui.theme.NeonPink
 import com.example.wisdomreminder.ui.theme.StarWhite
 import kotlinx.coroutines.flow.first
 import java.time.format.DateTimeFormatter
+import androidx.compose.runtime.livedata.observeAsState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,29 +92,37 @@ fun WisdomDetailScreen(
     wisdomId: Long,
     viewModel: MainViewModel
 ) {
-    // Get the uiState from the viewModel
     val uiState by viewModel.uiState.collectAsState()
 
-    // Extract wisdom lists from the current state
-    val wisdomLists = when (uiState) {
-        is MainViewModel.WisdomUiState.Success -> {
-            val state = uiState as MainViewModel.WisdomUiState.Success
-            Triple(state.activeWisdom, state.queuedWisdom, state.completedWisdom)
+    // CORRECTED: Construct allWisdom using the new specific lists from UiState.Success
+    val allWisdom = remember(uiState) {
+        when (val S = uiState) { // Use a different variable name to avoid conflict if needed
+            is MainViewModel.WisdomUiState.Success -> {
+                (S.activeWisdom +
+                        S.otherQueuedWisdom +
+                        S.favoriteQueuedWisdom +
+                        S.sevenWisdomPlaylist +
+                        S.completedWisdom
+                        ).distinctBy { it.id }
+            }
+            else -> emptyList()
         }
-        else -> Triple(emptyList(), emptyList(), emptyList())
+    }
+    val wisdom = remember(allWisdom, wisdomId) { // Find the wisdom from the correctly constructed list
+        allWisdom.find { it.id == wisdomId }
     }
 
-    // Destructure the lists
-    val (activeWisdom, queuedWisdom, completedWisdom) = wisdomLists
-
-    // Now proceed with the rest of your code
-    val allWisdom = activeWisdom + queuedWisdom + completedWisdom
-    val wisdom = allWisdom.find { it.id == wisdomId }
-
-    // Fetch the wisdom details if not already loaded
     LaunchedEffect(wisdomId) {
+        // Fetch selected wisdom if not found or to ensure freshness,
+        // though 'allWisdom' should ideally contain it if already loaded by MainViewModel.
+        // This call ensures detail screen has the latest individual item state.
         viewModel.getWisdomById(wisdomId)
     }
+    // You might want to observe viewModel.selectedWisdom for the detail screen's primary display
+    // val displayedWisdom by viewModel.selectedWisdom.collectAsState()
+    // And then use 'displayedWisdom' instead of 'wisdom' found from 'allWisdom' for the UI.
+    // For now, using 'wisdom' derived from 'allWisdom' as per your original structure.
+
 
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }

@@ -17,6 +17,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 
+enum class UnlockScreenDisplayMode {
+    ACTIVE_WISDOM,
+    QUEUED_PLAYLIST // Conceptual, full playlist logic is deferred
+}
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -44,13 +49,18 @@ class SettingsViewModel @Inject constructor(
     private val _eveningAlarmTime = MutableStateFlow(prefs.getString("evening_alarm_time", "20:00") ?: "20:00")
     val eveningAlarmTime = _eveningAlarmTime.asStateFlow()
 
-    // Notification settings methods
+    // Unlock screen display preference
+    private val _unlockScreenDisplayMode = MutableStateFlow(
+        UnlockScreenDisplayMode.valueOf(prefs.getString("unlock_display_mode", UnlockScreenDisplayMode.ACTIVE_WISDOM.name) ?: UnlockScreenDisplayMode.ACTIVE_WISDOM.name)
+    )
+    val unlockScreenDisplayMode = _unlockScreenDisplayMode.asStateFlow()
+
+
     fun setNotificationsEnabled(enabled: Boolean) {
         _notificationsEnabled.value = enabled
         prefs.edit().putBoolean("notifications_enabled", enabled).apply()
     }
 
-    // Alarm settings methods
     fun setAlarmsEnabled(enabled: Boolean) {
         _alarmsEnabled.value = enabled
         prefs.edit().putBoolean("alarms_enabled", enabled).apply()
@@ -86,16 +96,21 @@ class SettingsViewModel @Inject constructor(
         wisdomAlarmManager.scheduleAlarms()
     }
 
+    fun setUnlockScreenDisplayMode(mode: UnlockScreenDisplayMode) {
+        _unlockScreenDisplayMode.value = mode
+        prefs.edit().putString("unlock_display_mode", mode.name).apply()
+        // Here, you might trigger the WisdomDisplayService to update its behavior
+        // For now, this just saves the preference.
+    }
+
     @RequiresApi(Build.VERSION_CODES.S)
     fun checkExactAlarmPermission(context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         if (!alarmManager.canScheduleExactAlarms()) {
-            // Show dialog explaining the need for exact alarms
             AlertDialog.Builder(context)
                 .setTitle("Permission Required")
                 .setMessage("This app needs exact alarm permission to schedule wisdom reminders at specific times. Please grant this permission in the next screen.")
                 .setPositiveButton("Open Settings") { _, _ ->
-                    // Direct user to exact alarm settings
                     val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
                     intent.data = Uri.parse("package:${context.packageName}")
                     context.startActivity(intent)

@@ -34,16 +34,48 @@ import com.example.wisdomreminder.ui.components.*
 import com.example.wisdomreminder.ui.theme.*
 import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
 import androidx.compose.material.icons.filled.Info // style
+import androidx.compose.material.icons.filled.List // Import List icon
 import com.example.wisdomreminder.ui.navigation.Screen
+
+// ... other imports remain the same ...
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawBehind
+
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+
+import androidx.compose.ui.unit.dp
+
+
+import com.example.wisdomreminder.ui.components.*
+import com.example.wisdomreminder.ui.theme.*
+import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     viewModel: MainViewModel,
     onSettingsClick: () -> Unit,
-    onWisdomListClick: () -> Unit, // Kept for consistency, though not directly used for a button here
+    onWisdomListClick: () -> Unit,
     onWisdomClick: (Long) -> Unit,
-    onManageCategoriesClick: () -> Unit // New paramete
+    onManageCategoriesClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -71,19 +103,21 @@ fun MainScreen(
                 is MainViewModel.UiEvent.Error -> {
                     Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
                 }
-                is MainViewModel.UiEvent.WisdomDeleted -> { // Use 'is' for object singletons as well for consistency
+                is MainViewModel.UiEvent.WisdomDeleted -> {
                     Toast.makeText(context, "Wisdom deleted", Toast.LENGTH_SHORT).show()
                 }
-                is MainViewModel.UiEvent.WisdomUpdated -> { // Use 'is' for object singletons
+                is MainViewModel.UiEvent.WisdomUpdated -> {
                     Toast.makeText(context, "Wisdom updated", Toast.LENGTH_SHORT).show()
                 }
-                is MainViewModel.UiEvent.CategoryOperationSuccess -> { // Added this branch
+                is MainViewModel.UiEvent.CategoryOperationSuccess -> {
                     Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
                 }
-                // It's good practice to have an else for sealed classes in a when that's not an expression,
-                // but Kotlin might not strictly enforce it if all known subtypes are covered.
-                // However, the IDE error specifically asked for it or the missing branch.
-                // else -> Log.d(localTAG, "Unhandled UI Event: $event") // Optional: for debugging unhandled events
+                is MainViewModel.UiEvent.WisdomFavorited -> {
+                    Toast.makeText(context, "Favorite status updated", Toast.LENGTH_SHORT).show()
+                }
+                is MainViewModel.UiEvent.SevenWisdomCategoryChanged -> {
+                    Toast.makeText(context, "7 Wisdom Playlist category updated", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -104,7 +138,7 @@ fun MainScreen(
             }
     ) {
         Image(
-            painter = painterResource(id = R.drawable.ic_wisdom), // Ensure this drawable exists
+            painter = painterResource(id = R.drawable.ic_wisdom),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize().alpha(0.1f).blur(60.dp)
@@ -173,17 +207,28 @@ fun MainScreen(
                             StatCard("COMPLETED", state.completedCount.toString(), Icons.Default.PlayArrow, CyberBlue, Modifier.weight(1f))
                         }
 
-                        val allWisdomItems = remember(state.activeWisdom, state.queuedWisdom, state.completedWisdom) {
-                            state.activeWisdom + state.queuedWisdom + state.completedWisdom
+                        // ** THIS IS THE CORRECTED PART for MainScreen.kt **
+                        val allWisdomItems = remember(
+                            state.activeWisdom,
+                            state.otherQueuedWisdom,
+                            state.favoriteQueuedWisdom,
+                            state.sevenWisdomPlaylist,
+                            state.completedWisdom
+                        ) {
+                            (state.activeWisdom +
+                                    state.otherQueuedWisdom +
+                                    state.favoriteQueuedWisdom +
+                                    state.sevenWisdomPlaylist +
+                                    state.completedWisdom
+                                    ).distinctBy { it.id } // Ensure uniqueness if items overlap
                         }
 
                         if (allWisdomItems.isNotEmpty()) {
                             SwipeableWisdomCards(
                                 allWisdom = allWisdomItems,
-                                onWisdomClick = onWisdomClick // Corrected: Pass lambda directly
+                                onWisdomClick = onWisdomClick
                             )
                         }
-
 
                         Text(
                             text = "WISDOM EXPLORER",
@@ -195,7 +240,7 @@ fun MainScreen(
                             allWisdom = allWisdomItems,
                             selectedCategory = selectedCategoryForExplorer,
                             allCategories = state.allCategories,
-                            onWisdomClick = onWisdomClick, // Corrected: Pass lambda directly
+                            onWisdomClick = onWisdomClick,
                             onCategorySelected = { category -> selectedCategoryForExplorer = category }
                         )
 
@@ -220,7 +265,7 @@ fun MainScreen(
                                     CategoryWisdomCard(
                                         category = category,
                                         wisdomList = wisdomListForCategory,
-                                        onWisdomClick = onWisdomClick, // Corrected: Pass lambda directly
+                                        onWisdomClick = onWisdomClick,
                                         onRemove = { viewModel.removeCategoryCard(category) }
                                     )
                                 }
@@ -239,16 +284,24 @@ fun MainScreen(
                         }
 
                         Button(
-                            onClick = onManageCategoriesClick, // Use the passed lambda
+                            onClick = onWisdomListClick,
+                            colors = ButtonDefaults.buttonColors(containerColor = MoonGray.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.List, contentDescription = "View All Lists", tint = StarWhite)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("VIEW ALL LISTS", color = StarWhite)
+                        }
+
+                        Button(
+                            onClick = onManageCategoriesClick,
                             colors = ButtonDefaults.buttonColors(containerColor = MoonGray.copy(alpha = 0.3f)),
                             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                         ) {
-                            Icon(Icons.Filled.Info, contentDescription = "Manage Categories", tint = StarWhite) // Or your chosen icon
+                            Icon(Icons.Filled.Info, contentDescription = "Manage Categories", tint = StarWhite)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("MANAGE CATEGORIES", color = StarWhite)
                         }
-
-
 
                         if (showCategorySelectionDialog) {
                             val availableCategoriesForDialog = state.allCategories.filterNot { it in state.selectedCategoriesForCards }
@@ -273,7 +326,7 @@ fun MainScreen(
                                 color = ElectricGreen,
                                 modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                             )
-                            ActiveWisdomCard( // Ensure this is com.example.wisdomreminder.ui.components.ActiveWisdomCard
+                            ActiveWisdomCard(
                                 wisdom = state.activeWisdom.first(),
                                 onClick = { wisdom -> onWisdomClick(wisdom.id) },
                                 modifier = Modifier.fillMaxWidth()
@@ -293,10 +346,9 @@ fun MainScreen(
                         if (allWisdomItems.isNotEmpty()) {
                             AllWisdomSection(
                                 allWisdom = allWisdomItems,
-                                onWisdomClick = onWisdomClick // Corrected: Pass lambda directly
+                                onWisdomClick = onWisdomClick
                             )
                         }
-
 
                         if (allWisdomItems.isEmpty() && state.activeWisdom.isEmpty()) {
                             Button(
@@ -305,8 +357,6 @@ fun MainScreen(
                                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 16.dp)
                             ) { Text("ADD SAMPLE WISDOM") }
                         }
-
-
 
                         Button(
                             onClick = { viewModel.debugDatabaseContents() },
@@ -322,7 +372,7 @@ fun MainScreen(
 
                 if (showAddWisdomDialog) {
                     AddWisdomDialog(
-                        allExistingCategories = state.allCategories, // Pass the list of all categories
+                        allExistingCategories = state.allCategories,
                         onDismiss = { showAddWisdomDialog = false },
                         onSave = { text, source, category ->
                             viewModel.addWisdom(text, source, category)
@@ -330,7 +380,6 @@ fun MainScreen(
                         }
                     )
                 }
-
             }
         }
     }

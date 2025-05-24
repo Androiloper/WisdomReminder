@@ -14,17 +14,21 @@ interface IWisdomRepository {
 
     // 21/21 Rule specific operations
     fun getActiveWisdom(): Flow<List<Wisdom>>
-    fun getQueuedWisdom(): Flow<List<Wisdom>>
+    fun getStrictlyQueuedWisdom(): Flow<List<Wisdom>> // For items truly only in queue state
+    fun getFavoriteDisplayableWisdom(): Flow<List<Wisdom>> // Favorites that can be active or queued
+
     fun getCompletedWisdom(): Flow<List<Wisdom>>
     suspend fun recordExposure(wisdomId: Long): Result<Boolean>
     suspend fun resetDailyExposures(): Result<Boolean>
     suspend fun completeWisdom(): Result<Boolean>
     suspend fun activateWisdom(wisdomId: Long): Result<Boolean>
     suspend fun getActiveWisdomDirect(): Result<List<Wisdom>>
+    suspend fun updateFavoriteStatus(wisdomId: Long, isFavorite: Boolean): Result<Boolean> // New
+
 
     // Search and categorization
     fun searchWisdom(query: String): Flow<List<Wisdom>>
-    fun getWisdomByCategory(category: String): Flow<List<Wisdom>>
+    fun getDisplayableWisdomByCategory(category: String): Flow<List<Wisdom>> // For playlist like views
     fun getAllCategories(): Flow<List<String>>
 
     // Statistics

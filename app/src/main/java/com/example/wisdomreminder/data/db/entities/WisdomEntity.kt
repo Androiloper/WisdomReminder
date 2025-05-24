@@ -13,12 +13,14 @@ import java.time.LocalDateTime
     indices = [
         Index("isActive"), // Improve queries that filter by active status
         Index("category"), // Improve category-based queries
-        Index("dateCreated") // Improve sorting by creation date
+        Index("dateCreated"), // Improve sorting by creation date
+        Index("isFavorite"), // Index for favorite items
+        Index("orderIndex")  // Index for ordering
     ]
 )
 @TypeConverters(Converters::class)
 data class WisdomEntity(
-    @PrimaryKey(autoGenerate = true) var id: Long = 0L, // Changed: Auto-generated ID
+    @PrimaryKey(autoGenerate = true) var id: Long = 0L,
     val text: String,
     val source: String = "",
     val category: String = "General",
@@ -35,6 +37,7 @@ data class WisdomEntity(
 
     // Additional features
     val isFavorite: Boolean = false,
+    val orderIndex: Int = 0, // New field
     val backgroundColor: String? = null,
     val fontStyle: String? = null,
     val imageBackground: String? = null
@@ -53,6 +56,7 @@ data class WisdomEntity(
         exposuresToday = exposuresToday,
         lastExposureTime = lastExposureTime,
         isFavorite = isFavorite,
+        orderIndex = orderIndex, // Include new field
         backgroundColor = backgroundColor,
         fontStyle = fontStyle,
         imageBackground = imageBackground
@@ -60,9 +64,7 @@ data class WisdomEntity(
 
     companion object {
         fun fromWisdom(wisdom: Wisdom): WisdomEntity = WisdomEntity(
-            // id = wisdom.id, // Room will handle ID generation if it's 0L (new entity)
-            // If wisdom.id is not 0, it means we are updating an existing entity.
-            id = if (wisdom.id == 0L && wisdom.text.isNotEmpty()) 0L else wisdom.id, // Ensure new items for insertion have id 0
+            id = if (wisdom.id == 0L && wisdom.text.isNotEmpty()) 0L else wisdom.id,
             text = wisdom.text,
             source = wisdom.source,
             category = wisdom.category,
@@ -75,6 +77,7 @@ data class WisdomEntity(
             exposuresToday = wisdom.exposuresToday,
             lastExposureTime = wisdom.lastExposureTime,
             isFavorite = wisdom.isFavorite,
+            orderIndex = wisdom.orderIndex, // Include new field
             backgroundColor = wisdom.backgroundColor,
             fontStyle = wisdom.fontStyle,
             imageBackground = wisdom.imageBackground

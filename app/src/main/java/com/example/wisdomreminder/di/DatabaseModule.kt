@@ -23,10 +23,13 @@ object DatabaseModule {
             WisdomReminderDatabase::class.java,
             "wisdom-reminder-database"
         )
-            .addMigrations(WisdomReminderDatabase.MIGRATION_1_2, WisdomReminderDatabase.MIGRATION_2_3) // Added MIGRATION_2_3
-            // Consider removing fallbackToDestructiveMigration in production
-            // if you have proper migrations for all schema changes.
-            .fallbackToDestructiveMigration()
+            // Add all migrations
+            .addMigrations(
+                WisdomReminderDatabase.MIGRATION_1_2,
+                WisdomReminderDatabase.MIGRATION_2_3,
+                WisdomReminderDatabase.MIGRATION_3_4 // Added new migration
+            )
+            .fallbackToDestructiveMigration() // Keep for development, review for production
             .build()
     }
 
