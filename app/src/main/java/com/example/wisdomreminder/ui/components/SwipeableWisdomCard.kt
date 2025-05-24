@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PageSize
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -74,7 +76,7 @@ fun SwipeableWisdomCards(
         EmptyWisdomCard(
             modifier = modifier
                 .height(EMPTY_CARD_HEIGHT)
-                .padding(horizontal = 16.dp) // Keep some padding for the empty state if it's directly on screen edge
+                .padding(horizontal = 16.dp)
         )
         return
     }
@@ -93,7 +95,7 @@ fun SwipeableWisdomCards(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(SWIPEABLE_CARDS_PAGER_HEIGHT),
-            contentPadding = PaddingValues(horizontal = 0.dp), // Changed to 0.dp for full width
+            contentPadding = PaddingValues(horizontal = 0.dp),
             pageSize = PageSize.Fill
         ) { pageIndex ->
             val wisdom = allWisdom[pageIndex]
@@ -104,18 +106,10 @@ fun SwipeableWisdomCards(
                     .fillMaxSize()
                     .graphicsLayer {
                         val pageOffset = pagerState.getOffsetFractionForPage(pageIndex)
-                        // Optional: Keep subtle scaling/alpha for off-screen pages if contentPadding was very small,
-                        // but with 0.dp padding, these transforms might not be as relevant unless pages overlap.
-                        // For truly full-width, non-overlapping pages, these might not be needed or could be adjusted.
-                        // Let's assume for now the card itself will have some padding and a border.
-                        alpha = 1f - abs(pageOffset * 0.3f) // Less aggressive alpha for adjacent items if they slightly show
-                        scaleX = 1f - abs(pageOffset * 0.1f) // Less aggressive scaling
+                        alpha = 1f - abs(pageOffset * 0.3f)
+                        scaleX = 1f - abs(pageOffset * 0.1f)
                         scaleY = 1f - abs(pageOffset * 0.1f)
                     }
-                    .padding(horizontal = 16.dp) // Add padding here if cards are truly edge-to-edge in pager
-                // This ensures the card itself is not touching screen edges.
-                // Or rely on SingleWisdomDisplayCard's internal padding.
-                // Let's rely on SingleWisdomDisplayCard's internal padding.
             )
         }
 
@@ -181,12 +175,8 @@ fun SingleWisdomDisplayCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier // This modifier comes from the Pager item slot, now effectively full width
-            .padding(vertical = 8.dp) // Padding for the card itself, for top/bottom spacing
-            // Consider adding horizontal padding here if the pager has 0.dp contentPadding and you want
-            // the card itself to have some margin from screen edges.
-            // E.g., .padding(horizontal = 8.dp, vertical = 8.dp)
-            // For now, let internal padding of the Column handle content spacing.
+        modifier = modifier
+            .padding(vertical = 8.dp)
             .then(CosmicAnimations.floatEffect(floatMagnitude = 1.5f, floatSpeed = 3500))
             .then(CosmicAnimations.glowEffect(glowColor = NebulaPurple.copy(alpha = 0.6f), glowAlphaRange = 0.2f..0.5f))
             .energyFlowEffect(colors = listOf(NebulaPurple.copy(alpha = 0.8f), CyberBlue.copy(alpha = 0.7f), NeonPink.copy(alpha = 0.6f)), flowSpeed = 4000)
@@ -212,26 +202,32 @@ fun SingleWisdomDisplayCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 24.dp), // Internal padding for content
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 20.dp, vertical = 16.dp), // Adjusted vertical padding
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val titleText = wisdom.source.takeIf { it.isNotBlank() }
-                    ?: wisdom.category.takeIf { it.isNotBlank() }
-                    ?: "Wisdom"
-                val titleColor = if (wisdom.source.isNotBlank()) CyberBlue else NebulaPurple
+            // Title Section
+            val titleText = wisdom.source.takeIf { it.isNotBlank() }
+                ?: wisdom.category.takeIf { it.isNotBlank() }
+                ?: "Wisdom"
+            val titleColor = if (wisdom.source.isNotBlank()) CyberBlue else NebulaPurple
 
-                Text(
-                    text = titleText,
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = titleColor,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 12.dp),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Text(
+                text = titleText,
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = titleColor,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 10.dp),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
 
+            // Scrollable Wisdom Text Section
+            Column(
+                modifier = Modifier
+                    .weight(1f) // This Column will take available vertical space
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()) // Scroll this Column
+            ) {
                 Text(
                     text = "\"${wisdom.text}\"",
                     style = MaterialTheme.typography.titleLarge.copy(
@@ -239,15 +235,16 @@ fun SingleWisdomDisplayCard(
                     ),
                     color = StarWhite,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    modifier = Modifier.padding(top = 4.dp, bottom = 10.dp) // Padding for the text itself
                 )
             }
 
+            // Category Badge Section (at the bottom)
             if (wisdom.category.isNotBlank()) {
+                Spacer(modifier = Modifier.height(10.dp)) // Space before badge
                 Surface(
                     color = NebulaPurple.copy(alpha = 0.35f),
                     shape = MaterialTheme.shapes.small,
-                    modifier = Modifier.padding(top = 16.dp)
                 ) {
                     Text(
                         text = wisdom.category.uppercase(),
@@ -257,7 +254,9 @@ fun SingleWisdomDisplayCard(
                     )
                 }
             } else {
-                Spacer(modifier = Modifier.height(20.dp))
+                // If no category, add a spacer to maintain some bottom margin
+                val badgeMinHeight = with(MaterialTheme.typography.labelMedium) { fontSize.value + 12 } // approx height of badge
+                Spacer(modifier = Modifier.height(badgeMinHeight.dp + 10.dp))
             }
         }
     }
