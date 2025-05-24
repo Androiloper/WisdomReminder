@@ -31,7 +31,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.wisdomreminder.R
 import com.example.wisdomreminder.model.Wisdom
-import com.example.wisdomreminder.ui.components.* import com.example.wisdomreminder.ui.theme.*
+import com.example.wisdomreminder.ui.components.*
+import com.example.wisdomreminder.ui.theme.*
 import com.example.wisdomreminder.ui.wisdom.AddWisdomDialog
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
@@ -171,13 +172,13 @@ fun MainScreen(
                                 StatCard("COMPLETED", state.completedCount.toString(), Icons.Default.PlayArrow, CyberBlue, Modifier.weight(1f))
                             }
 
-                            val allWisdomItems = remember(state.allWisdomFlatList) { // Use the flat list for these general views
-                                state.allWisdomFlatList
+                            val latestWisdomItems = remember(state.allWisdomFlatList) {
+                                state.allWisdomFlatList.sortedByDescending { it.dateCreated }.take(7)
                             }
 
-                            if (allWisdomItems.isNotEmpty()) {
+                            if (latestWisdomItems.isNotEmpty()) {
                                 SwipeableWisdomCards(
-                                    allWisdom = allWisdomItems,
+                                    allWisdom = latestWisdomItems,
                                     onWisdomClick = onWisdomClick
                                 )
                             }
@@ -200,8 +201,8 @@ fun MainScreen(
                                         color = StarWhite.copy(alpha = 0.9f),
                                         modifier = Modifier.padding(bottom = 8.dp)
                                     )
-                                    val wisdomForThisCategory = remember(allWisdomItems, categoryName) {
-                                        allWisdomItems.filter { it.category.equals(categoryName, ignoreCase = true) }
+                                    val wisdomForThisCategory = remember(state.allWisdomFlatList, categoryName) {
+                                        state.allWisdomFlatList.filter { it.category.equals(categoryName, ignoreCase = true) }
                                     }
                                     if (wisdomForThisCategory.isNotEmpty()) {
                                         SwipeableWisdomCards(
@@ -257,7 +258,7 @@ fun MainScreen(
                                     onClick = { wisdom -> onWisdomClick(wisdom.id) },
                                     modifier = Modifier.fillMaxWidth()
                                 )
-                            } else if (allWisdomItems.isEmpty()){
+                            } else if (state.allWisdomFlatList.isEmpty()){
                                 GlassCard(
                                     modifier = Modifier.fillMaxWidth().height(150.dp).clickable { showAddWisdomDialog = true },
                                 ) {
@@ -269,7 +270,7 @@ fun MainScreen(
                                 }
                             }
 
-                            if (allWisdomItems.isEmpty() && state.activeWisdom.isEmpty()) {
+                            if (state.allWisdomFlatList.isEmpty() && state.activeWisdom.isEmpty()) {
                                 Button(
                                     onClick = { viewModel.addSampleWisdom() },
                                     colors = ButtonDefaults.buttonColors(containerColor = NeonPink),

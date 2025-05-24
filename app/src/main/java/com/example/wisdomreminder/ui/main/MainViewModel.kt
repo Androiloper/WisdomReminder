@@ -67,13 +67,12 @@ class MainViewModel @Inject constructor(
     private val _events = MutableSharedFlow<UiEvent>()
     val events = _events.asSharedFlow()
 
-    // This BroadcastReceiver listens for service status changes
     private val serviceStatusReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_SERVICE_STATUS_CHANGE) {
                 val isRunning = intent.getBooleanExtra(EXTRA_IS_RUNNING, false)
                 Log.d(TAG, "Service status broadcast received: running=$isRunning")
-                updateServiceRunningState(isRunning) // CALL TO THE FUNCTION
+                updateServiceRunningState(isRunning)
             }
         }
     }
@@ -81,7 +80,6 @@ class MainViewModel @Inject constructor(
     init {
         Log.d(TAG, "MainViewModel initialized.")
         val intentFilter = IntentFilter(ACTION_SERVICE_STATUS_CHANGE)
-        // Register the receiver
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             applicationContext.registerReceiver(serviceStatusReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -320,7 +318,6 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    // DEFINITION OF THE FUNCTION
     private fun updateServiceRunningState(isRunning: Boolean) {
         viewModelScope.launch(Dispatchers.Main) {
             val currentUiState = _uiState.value
@@ -497,7 +494,7 @@ class MainViewModel @Inject constructor(
     fun checkAndRestartService(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
             val isCurrentlyRunning = WisdomDisplayService.isServiceRunning
-            updateServiceRunningState(isCurrentlyRunning) // CALL TO THE FUNCTION
+            updateServiceRunningState(isCurrentlyRunning)
             if (!isCurrentlyRunning) {
                 startService(context)
             }
@@ -515,7 +512,7 @@ class MainViewModel @Inject constructor(
                     context.startService(serviceIntent)
                 }
             } catch (e: Exception) {
-                updateServiceRunningState(false) // Ensure state is updated on failure
+                updateServiceRunningState(false)
                 _events.emit(UiEvent.Error("Failed to start wisdom service: ${e.localizedMessage}"))
             }
         }
@@ -533,9 +530,74 @@ class MainViewModel @Inject constructor(
         }
     }
     fun addSampleWisdom() { /* ... */ }
-    fun renameWisdomCategory(oldName: String, newName: String) { /* ... */ }
-    fun clearWisdomCategory(categoryName: String) { /* ... */ }
-    fun setCategoryForSevenWisdomPlaylist(categoryName: String?) { /* ... */ }
+    fun renameWisdomCategory(oldName: String, newName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (oldName.isBlank() || newName.isBlank() || oldName.equals(newName, ignoreCase = true)) {
+                _events.emit(UiEvent.Error("Invalid category names for rename."))
+                return@launch
+            }
+            wisdomRepository.renameCategory(oldName, newName).fold(
+                onSuccess = { count ->
+                    _events.emit(UiEvent.CategoryOperationSuccess("Category '$oldName' renamed to '$newName'"))
+                    if (_selectedCategoriesForCards.value.contains(oldName)) {
+                        val updatedDashboardCategories = _selectedCategoriesForCards.value.map { if (it == oldName) newName else it }.distinct()
+                        _selectedCategoriesForCards.value = updatedDashboardCategories
+                        saveSelectedCategoriesForCards(updatedDashboardCategories)
+                    }
+                    if (oldName == _categoryForSevenWisdomPlaylist.value) {
+                        setCategoryForSevenWisdomPlaylist(newName)
+                    }
+                    if (_mainScreenExplorerCategories.value.contains(oldName)) { // Check if it was in the main screen explorers
+                        val updatedExplorers = _mainScreenExplorerCategories.value.map { if (it == oldName) newName else it }.distinct()
+                        _mainScreenExplorerCategories.value = updatedExplorers
+                        saveMainScreenExplorerCategories(updatedExplorers)
+                    }
+                    refreshData() // Refresh to update all category lists
+                },
+                onFailure = {
+                    _events.emit(UiEvent.Error("Failed to rename category: ${it.localizedMessage}"))
+                }
+            )
+        }
+    }
+
+    fun clearWisdomCategory(categoryName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (categoryName.isBlank() || categoryName.equals(DEFAULT_CATEGORY, ignoreCase = true)) {
+                _events.emit(UiEvent.Error("Cannot clear the default 'General' category or a blank category."))
+                return@launch
+            }
+            wisdomRepository.clearCategoryItemsToGeneral(categoryName, DEFAULT_CATEGORY).fold(
+                onSuccess = { count ->
+                    _events.emit(UiEvent.CategoryOperationSuccess("Items from '$categoryName' moved to '$DEFAULT_CATEGORY'."))
+                    if (_selectedCategoriesForCards.value.contains(categoryName)) {
+                        removeCategoryCard(categoryName)
+                    }
+                    if (_mainScreenExplorerCategories.value.contains(categoryName)) {
+                        removeCategoryFromMainScreenExplorers(categoryName)
+                    }
+                    if (categoryName == _categoryForSevenWisdomPlaylist.value) {
+                        setCategoryForSevenWisdomPlaylist(null)
+                    }
+                    refreshData() // Add this line to ensure category lists are updated
+                },
+                onFailure = {
+                    _events.emit(UiEvent.Error("Failed to clear category: ${it.localizedMessage}"))
+                }
+            )
+        }
+    }
+    fun setCategoryForSevenWisdomPlaylist(categoryName: String?) {
+        viewModelScope.launch {
+            _categoryForSevenWisdomPlaylist.value = categoryName
+            if (categoryName != null) {
+                prefs.edit().putString(CATEGORY_FOR_SEVEN_WISDOM_KEY, categoryName).apply()
+            } else {
+                prefs.edit().remove(CATEGORY_FOR_SEVEN_WISDOM_KEY).apply()
+            }
+            // _events.emit(UiEvent.SevenWisdomCategoryChanged) // Event emission can be kept if needed elsewhere
+        }
+    }
     fun debugDatabaseContents() { /* ... */ }
 
 }
