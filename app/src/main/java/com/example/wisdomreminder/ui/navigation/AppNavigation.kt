@@ -19,9 +19,17 @@ import com.example.wisdomreminder.ui.categories.ManageCategoriesScreen
 sealed class Screen(val route: String) {
     object Main : Screen("main")
     object Settings : Screen("settings")
-    object WisdomList : Screen("wisdom_list?initialTab={initialTab}") {
-        fun createRoute(initialTabName: String? = null): String {
-            return initialTabName?.let { "wisdom_list?initialTab=$it" } ?: "wisdom_list"
+    // Updated WisdomList route to include categoryName
+    object WisdomList : Screen("wisdom_list?initialTab={initialTab}&categoryName={categoryName}") {
+        fun createRoute(initialTabName: String? = null, categoryName: String? = null): String {
+            var route = "wisdom_list"
+            val params = mutableListOf<String>()
+            initialTabName?.let { params.add("initialTab=$it") }
+            categoryName?.let { params.add("categoryName=$it") }
+            if (params.isNotEmpty()) {
+                route += "?" + params.joinToString("&")
+            }
+            return route
         }
     }
     object WisdomDetail : Screen("wisdom_detail/{wisdomId}") {
@@ -45,7 +53,7 @@ fun AppNavigation(
                 viewModel = mainViewModel,
                 onSettingsClick = { navController.navigate(Screen.Settings.route) },
                 onNavigateToManageCategories = { navController.navigate(Screen.ManageCategories.route) },
-                onNavigateToWisdomList = { tabName -> navController.navigate(Screen.WisdomList.createRoute(tabName)) },
+                onNavigateToWisdomList = { tabName -> navController.navigate(Screen.WisdomList.createRoute(initialTabName = tabName)) },
                 onWisdomClick = { wisdomId -> navController.navigate(Screen.WisdomDetail.createRoute(wisdomId)) }
             )
         }
@@ -59,22 +67,28 @@ fun AppNavigation(
 
         composable(
             route = Screen.WisdomList.route,
-            arguments = listOf(navArgument("initialTab") { type = NavType.StringType; nullable = true })
+            arguments = listOf(
+                navArgument("initialTab") { type = NavType.StringType; nullable = true },
+                navArgument("categoryName") { type = NavType.StringType; nullable = true } // Added categoryName argument
+            )
         ) { backStackEntry ->
             val initialTabName = backStackEntry.arguments?.getString("initialTab")
+            val categoryNameFilter = backStackEntry.arguments?.getString("categoryName") // Get categoryName
+
             val initialTabIndex = when (initialTabName?.lowercase()) {
                 "all" -> 0
                 "active" -> 1
                 "queued" -> 2
                 "completed" -> 3
-                else -> 0 // Default to "ALL" if no or unknown tab is specified
+                else -> 0
             }
             WisdomListScreen(
                 onBackClick = { navController.popBackStack() },
                 onWisdomClick = { wisdomId -> navController.navigate(Screen.WisdomDetail.createRoute(wisdomId)) },
                 viewModel = mainViewModel,
                 onManageCategoriesClick = { navController.navigate(Screen.ManageCategories.route) },
-                initialSelectedTabIndex = initialTabIndex
+                initialSelectedTabIndex = initialTabIndex,
+                categoryFilterName = categoryNameFilter // Pass categoryName to WisdomListScreen
             )
         }
 
@@ -94,6 +108,7 @@ fun AppNavigation(
 
         composable(Screen.ManageCategories.route) {
             ManageCategoriesScreen(
+                navController = navController, // Pass NavController
                 viewModel = mainViewModel,
                 onBackClick = { navController.popBackStack() }
             )

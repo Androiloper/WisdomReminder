@@ -1,33 +1,37 @@
 package com.example.wisdomreminder.ui.categories
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons // Keep for Icons.Default.Edit
-//import androidx.compose.material.icons.filled.AddCircleOutline // Will be replaced by painterResource
+import androidx.compose.material.icons.Icons
+
 import androidx.compose.material.icons.filled.ArrowBack
-//import androidx.compose.material.icons.filled.DeleteOutline // Will be replaced by painterResource
+
 import androidx.compose.material.icons.filled.Edit
-//import androidx.compose.material.icons.filled.RemoveCircleOutline // Will be replaced by painterResource
+
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource // Added for painterResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import android.widget.Toast
-import com.example.wisdomreminder.R // Added for R.drawable references
+import androidx.navigation.NavHostController // Import NavController
+import com.example.wisdomreminder.R
 import com.example.wisdomreminder.ui.components.GlassCard
 import com.example.wisdomreminder.ui.main.MainViewModel
+import com.example.wisdomreminder.ui.navigation.Screen // Import Screen for navigation routes
 import com.example.wisdomreminder.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManageCategoriesScreen(
+    navController: NavHostController, // Added NavController
     viewModel: MainViewModel,
     onBackClick: () -> Unit
 ) {
@@ -118,6 +122,9 @@ fun ManageCategoriesScreen(
                                         } else {
                                             viewModel.addCategoryToMainScreenExplorers(category)
                                         }
+                                    },
+                                    onCategoryClick = { categoryName -> // New click listener for the category itself
+                                        navController.navigate(Screen.WisdomList.createRoute(initialTabName = "all", categoryName = categoryName))
                                     }
                                 )
                             }
@@ -159,9 +166,14 @@ fun ManageCategoryItem(
     isSelectedForMainScreenExplorer: Boolean,
     onRenameClick: () -> Unit,
     onClearCategoryClick: () -> Unit,
-    onToggleMainScreenExplorerClick: () -> Unit
+    onToggleMainScreenExplorerClick: () -> Unit,
+    onCategoryClick: (String) -> Unit // New callback for clicking the category item
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCategoryClick(categoryName) } // Make the whole card clickable
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -204,6 +216,7 @@ fun ManageCategoryItem(
     }
 }
 
+// RenameCategoryDialog and DeleteCategoryConfirmationDialog remain the same
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RenameCategoryDialog(

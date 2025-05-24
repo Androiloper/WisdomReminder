@@ -20,7 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.* // Keep for other icons like Search, Clear, Favorite, Check, PlayArrow, Delete
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -35,14 +35,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.painterResource // Important for custom icons
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.wisdomreminder.R
+import com.example.wisdomreminder.R // Important for R.drawable access
 import com.example.wisdomreminder.model.Wisdom
 import com.example.wisdomreminder.ui.components.GlassCard
 import com.example.wisdomreminder.ui.main.MainViewModel
@@ -51,13 +51,39 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 
+// --- Helper Composables (ensure all are defined or imported) ---
 
 @Composable
-fun SimplifiedWisdomRow( // Generic item for the "ALL" tab
+fun EmptyStateMessage(text: String) {
+    Box(
+        modifier = Modifier.fillMaxSize().padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = StarWhite.copy(alpha = 0.8f),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun SectionHeader(title: String, color: Color) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+        color = color,
+        modifier = Modifier.padding(vertical = 8.dp)
+    )
+}
+
+@Composable
+fun SimplifiedWisdomRow(
     wisdom: Wisdom,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
-    viewModel: MainViewModel // Added to perform actions
+    viewModel: MainViewModel
 ) {
     GlassCard(modifier = Modifier
         .fillMaxWidth()
@@ -86,8 +112,8 @@ fun SimplifiedWisdomRow( // Generic item for the "ALL" tab
                 )
             }
             Spacer(Modifier.width(8.dp))
-            Column(horizontalAlignment = Alignment.End) {
-                IconButton(onClick = onToggleFavorite, modifier = Modifier.size(32.dp)) {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.Center) {
+                IconButton(onClick = onToggleFavorite, modifier = Modifier.size(36.dp)) {
                     Icon(
                         imageVector = if (wisdom.isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                         contentDescription = "Toggle Favorite",
@@ -112,16 +138,15 @@ fun SimplifiedWisdomRow( // Generic item for the "ALL" tab
     }
 }
 
-
 @Composable
-fun AllWisdomDisplayList( // New composable for the "ALL" tab
+fun AllWisdomDisplayList(
     wisdomList: List<Wisdom>,
     onWisdomClick: (Long) -> Unit,
     searchQuery: String,
     viewModel: MainViewModel
 ) {
     val filteredWisdom = if (searchQuery.isEmpty()) {
-        wisdomList.sortedByDescending { it.dateCreated } // Example: sort by newest first
+        wisdomList.sortedByDescending { it.dateCreated }
     } else {
         wisdomList.filter {
             it.text.contains(searchQuery, ignoreCase = true) ||
@@ -155,210 +180,6 @@ fun AllWisdomDisplayList( // New composable for the "ALL" tab
     }
 }
 
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun WisdomListScreen(
-    onBackClick: () -> Unit,
-    onWisdomClick: (Long) -> Unit,
-    viewModel: MainViewModel,
-    onManageCategoriesClick: () -> Unit,
-    initialSelectedTabIndex: Int = 0 // Default to "ALL" tab
-) {
-
-    LaunchedEffect(Unit) {
-        Log.d("WisdomListScreen", "Screen opened - forcing refresh")
-        viewModel.refreshData()
-    }
-
-    val uiState by viewModel.uiState.collectAsState()
-    var selectedTabIndex by remember(initialSelectedTabIndex) { mutableIntStateOf(initialSelectedTabIndex) } // Use parameter
-    var searchQuery by remember { mutableStateOf("") }
-    var showAddWisdomDialog by remember { mutableStateOf(false) }
-    var showCategorySelectorForSevenWisdom by remember { mutableStateOf(false) }
-
-
-    val tabs = listOf("ALL", "Active", "Queued", "Completed") // Added "ALL"
-
-    val allWisdomFlatListFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.allWisdomFlatList ?: emptyList() // New
-    val activeWisdomListFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.activeWisdom ?: emptyList()
-    val favoriteQueuedWisdomFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.favoriteQueuedWisdom ?: emptyList()
-    val sevenWisdomPlaylistFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.sevenWisdomPlaylist ?: emptyList()
-    val selectedCategoryForSevenWisdomState = (uiState as? MainViewModel.WisdomUiState.Success)?.selectedCategoryForSevenWisdom
-    val otherQueuedWisdomFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.otherQueuedWisdom ?: emptyList()
-    val completedWisdomList = (uiState as? MainViewModel.WisdomUiState.Success)?.completedWisdom ?: emptyList()
-    val allCategoriesFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.allCategories ?: emptyList()
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(DeepSpace)
-            .drawBehind {
-                drawRect(brush = Brush.verticalGradient(colors = listOf(CosmicBlack, DeepSpace)))
-                for (i in 0..100) {
-                    val x = (Math.random() * size.width).toFloat()
-                    val y = (Math.random() * size.height).toFloat()
-                    val radius = (Math.random() * 2f + 0.5f).toFloat()
-                    val alphaVal = (Math.random() * 0.8f + 0.2f).toFloat()
-                    drawCircle(color = StarWhite.copy(alpha = alphaVal), radius = radius, center = Offset(x, y))
-                }
-            }
-    ) {
-        Image(
-            painter = painterResource(id = R.drawable.ic_wisdom),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize().alpha(0.1f).blur(20.dp)
-        )
-
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = Color.Transparent,
-            contentColor = StarWhite,
-            topBar = {
-                TopAppBar(
-                    title = { Text("WISDOM LISTS", style = MaterialTheme.typography.headlineLarge) },
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(Icons.Filled.ArrowBack, "Back", tint = StarWhite)
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = onManageCategoriesClick) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_settings), // Or a specific categories icon
-                                contentDescription = "Manage Categories",
-                                tint = StarWhite
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = GlassSurface.copy(alpha = 0.5f),
-                        titleContentColor = StarWhite,
-                        navigationIconContentColor = StarWhite
-                    )
-                )
-            },
-            floatingActionButton = {
-                FloatingActionButton(
-                    onClick = { showAddWisdomDialog = true },
-                    containerColor = NebulaPurple,
-                    contentColor = StarWhite
-                ) { Icon(Icons.Default.Add, "Add Wisdom") }
-            }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier.fillMaxSize().padding(paddingValues)
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    placeholder = { Text("Search wisdom") },
-                    leadingIcon = { Icon(Icons.Default.Search, "Search", tint = StarWhite.copy(alpha = 0.7f)) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, "Clear search", tint = StarWhite.copy(alpha = 0.7f))
-                            }
-                        }
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CyberBlue,
-                        unfocusedBorderColor = StarWhite.copy(alpha = 0.5f),
-                        focusedTextColor = StarWhite,
-                        unfocusedTextColor = StarWhite,
-                        cursorColor = CyberBlue,
-                        focusedContainerColor = GlassSurface.copy(alpha = 0.3f),
-                        unfocusedContainerColor = GlassSurface.copy(alpha = 0.2f),
-                        focusedLabelColor = CyberBlue,
-                        unfocusedLabelColor = StarWhite.copy(alpha = 0.7f)
-                    ),
-                    shape = MaterialTheme.shapes.medium,
-                    singleLine = true
-                )
-
-                TabRow(
-                    selectedTabIndex = selectedTabIndex,
-                    containerColor = GlassSurface.copy(alpha = 0.3f),
-                    contentColor = StarWhite,
-                    indicator = { tabPositions ->
-                        TabRowDefaults.Indicator(
-                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                            color = when (selectedTabIndex) {
-                                0 -> AccentOrange // ALL tab color
-                                1 -> ElectricGreen // Active tab
-                                2 -> NebulaPurple  // Queued tab
-                                else -> CyberBlue   // Completed tab
-                            }
-                        )
-                    }
-                ) {
-                    tabs.forEachIndexed { index, title ->
-                        Tab(
-                            selected = selectedTabIndex == index,
-                            onClick = { selectedTabIndex = index },
-                            text = { Text(title.uppercase(), style = MaterialTheme.typography.bodyMedium) },
-                            selectedContentColor = when (index) {
-                                0 -> AccentOrange
-                                1 -> ElectricGreen
-                                2 -> NebulaPurple
-                                else -> CyberBlue
-                            },
-                            unselectedContentColor = StarWhite.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-
-                when (selectedTabIndex) {
-                    0 -> AllWisdomDisplayList(allWisdomFlatListFromState, onWisdomClick, searchQuery, viewModel) // New
-                    1 -> ActiveWisdomList(activeWisdomListFromState, onWisdomClick, searchQuery, viewModel)
-                    2 -> QueuedWisdomPlaylistsScreen(
-                        sevenWisdomPlaylist = sevenWisdomPlaylistFromState,
-                        favoriteQueuedWisdom = favoriteQueuedWisdomFromState,
-                        otherRandomQueuedWisdom = otherQueuedWisdomFromState,
-                        selectedCategoryForSeven = selectedCategoryForSevenWisdomState,
-                        onWisdomClick = onWisdomClick,
-                        viewModel = viewModel,
-                        searchQuery = searchQuery,
-                        onSelectCategoryForSevenWisdom = {
-                            showCategorySelectorForSevenWisdom = true
-                        }
-                    )
-                    3 -> CompletedWisdomList(completedWisdomList, onWisdomClick, { viewModel.activateWisdom(it) }, searchQuery, viewModel)
-                }
-            }
-        }
-
-        if (showAddWisdomDialog) {
-            val currentCategories = (uiState as? MainViewModel.WisdomUiState.Success)?.allCategories ?: emptyList()
-            AddWisdomDialog(
-                allExistingCategories = currentCategories,
-                onDismiss = { showAddWisdomDialog = false },
-                onSave = { text, source, category ->
-                    viewModel.addWisdom(text, source, category)
-                    showAddWisdomDialog = false
-                }
-            )
-        }
-
-        if (showCategorySelectorForSevenWisdom) {
-            CategorySelectorDialog(
-                allCategories = allCategoriesFromState,
-                currentSelectedCategory = selectedCategoryForSevenWisdomState,
-                onDismiss = { showCategorySelectorForSevenWisdom = false },
-                onCategorySelected = { category ->
-                    viewModel.setCategoryForSevenWisdomPlaylist(category)
-                    showCategorySelectorForSevenWisdom = false
-                }
-            )
-        }
-    }
-}
-
-// ActiveWisdomList, QueuedWisdomPlaylistsScreen, CompletedWisdomList, etc. remain the same
-// ... (ensure ActiveWisdomItemSimplified, QueuedWisdomItemWithSwipe, CompletedWisdomItemSimplified, EmptyStateMessage, CategorySelectorDialog, SectionHeader are defined as before)
-
 @Composable
 fun ActiveWisdomList(
     wisdom: List<Wisdom>,
@@ -387,7 +208,7 @@ fun ActiveWisdomList(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            items(items = filteredWisdom, key = { "active-${it.id}" }) { item -> // Added prefix to key
+            items(items = filteredWisdom, key = { "active-${it.id}" }) { item ->
                 ActiveWisdomItemSimplified(
                     wisdom = item,
                     onClick = { onWisdomClick(item.id) },
@@ -540,7 +361,11 @@ fun QueuedWisdomPlaylistsScreen(
                     color = ElectricGreen
                 )
                 IconButton(onClick = onSelectCategoryForSevenWisdom) {
-                    Icon(Icons.Filled.Add, contentDescription = "Select Category for '7 Wisdom' Playlist", tint = ElectricGreen)
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_playlist_add), // Updated
+                        contentDescription = "Select Category for '7 Wisdom' Playlist",
+                        tint = ElectricGreen
+                    )
                 }
             }
             if (selectedCategoryForSeven == null) {
@@ -612,78 +437,6 @@ fun QueuedWisdomPlaylistsScreen(
     }
 }
 
-
-@Composable
-fun CategorySelectorDialog(
-    allCategories: List<String>,
-    currentSelectedCategory: String?,
-    onDismiss: () -> Unit,
-    onCategorySelected: (String?) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Select Category for Playlist", color = ElectricGreen) },
-        text = {
-            if (allCategories.isEmpty()) {
-                Text("No categories available. Add some wisdom with categories first.", color = StarWhite)
-            } else {
-                LazyColumn {
-                    item {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { onCategorySelected(null) }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = if (currentSelectedCategory == null) Icons.Filled.CheckCircle else Icons.Filled.Info,
-                                contentDescription = "Clear Selection",
-                                tint = if (currentSelectedCategory == null) ElectricGreen else StarWhite.copy(alpha = 0.7f)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("None (Clear Selection)", color = StarWhite)
-                        }
-                    }
-                    items(allCategories.sorted()) { category ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { onCategorySelected(category) }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = if (category == currentSelectedCategory) Icons.Filled.CheckCircle else Icons.Filled.Info,
-                                contentDescription = category,
-                                tint = if (category == currentSelectedCategory) ElectricGreen else StarWhite.copy(alpha = 0.7f)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(category, color = StarWhite)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("CLOSE", color = StarWhite.copy(alpha = 0.7f)) }
-        },
-        containerColor = GlassSurfaceDark
-    )
-}
-
-
-@Composable
-fun SectionHeader(title: String, color: Color) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-        color = color,
-        modifier = Modifier.padding(vertical = 8.dp)
-    )
-}
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QueuedWisdomItemWithSwipe(
@@ -748,7 +501,6 @@ fun QueuedWisdomItemWithSwipe(
         }
     )
 }
-
 
 @Composable
 fun QueuedWisdomItemSimplified(
@@ -858,7 +610,6 @@ fun QueuedWisdomItemSimplified(
     }
 }
 
-
 @Composable
 fun CompletedWisdomList(
     wisdom: List<Wisdom>,
@@ -885,7 +636,7 @@ fun CompletedWisdomList(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            itemsIndexed(items = filteredWisdom, key = { _, item -> "completed-${item.id}" }) { index, item -> // Added prefix to key
+            itemsIndexed(items = filteredWisdom, key = { _, item -> "completed-${item.id}" }) { index, item ->
                 key(item.id) {
                     CompletedWisdomItemSimplified(
                         wisdom = item,
@@ -954,7 +705,11 @@ fun CompletedWisdomItemSimplified(
                         Spacer(Modifier.width(4.dp))
                         Text("REACTIVATING...")
                     } else {
-                        Icon(Icons.Default.PlayArrow, "Reactivate", Modifier.size(16.dp)) // Changed to Replay Icon
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_replay), // Updated
+                            contentDescription = "Reactivate",
+                            modifier = Modifier.size(16.dp)
+                        )
                         Spacer(Modifier.width(4.dp))
                         Text("REACTIVATE")
                     }
@@ -1011,18 +766,315 @@ fun CompletedWisdomItemSimplified(
     }
 }
 
-
 @Composable
-fun EmptyStateMessage(text: String) {
+fun CategorySelectorDialog(
+    allCategories: List<String>,
+    currentSelectedCategory: String?,
+    onDismiss: () -> Unit,
+    onCategorySelected: (String?) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Category for Playlist", color = ElectricGreen) },
+        text = {
+            if (allCategories.isEmpty()) {
+                Text("No categories available. Add some wisdom with categories first.", color = StarWhite)
+            } else {
+                LazyColumn {
+                    item {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onCategorySelected(null) }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                painter = if (currentSelectedCategory == null) painterResource(id = R.drawable.ic_radio_button_checked_custom) // Assuming you have a checked version
+                                else painterResource(id = R.drawable.ic_radio_button_unchecked), // Updated
+                                contentDescription = "Clear Selection",
+                                tint = if (currentSelectedCategory == null) ElectricGreen else StarWhite.copy(alpha = 0.7f)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("None (Clear Selection)", color = StarWhite)
+                        }
+                    }
+                    items(allCategories.sorted()) { category ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onCategorySelected(category) }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                painter = if (category == currentSelectedCategory) painterResource(id = R.drawable.ic_radio_button_checked_custom) // Assuming you have a checked version
+                                else painterResource(id = R.drawable.ic_radio_button_unchecked), // Updated
+                                contentDescription = category,
+                                tint = if (category == currentSelectedCategory) ElectricGreen else StarWhite.copy(alpha = 0.7f)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(category, color = StarWhite)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("CLOSE", color = StarWhite.copy(alpha = 0.7f)) }
+        },
+        containerColor = GlassSurfaceDark
+    )
+}
+
+
+// --- Main WisdomListScreen Composable ---
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WisdomListScreen(
+    onBackClick: () -> Unit,
+    onWisdomClick: (Long) -> Unit,
+    viewModel: MainViewModel,
+    onManageCategoriesClick: () -> Unit,
+    initialSelectedTabIndex: Int = 0,
+    categoryFilterName: String? = null
+) {
+
+    LaunchedEffect(categoryFilterName) {
+        Log.d("WisdomListScreen", "Screen opened/filter changed. Category: $categoryFilterName - forcing refresh")
+        viewModel.refreshData()
+    }
+
+    val uiState by viewModel.uiState.collectAsState()
+    var selectedTabIndex by remember(initialSelectedTabIndex) { mutableIntStateOf(initialSelectedTabIndex) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showAddWisdomDialog by remember { mutableStateOf(false) }
+    var showCategorySelectorForSevenWisdom by remember { mutableStateOf(false) }
+
+    val screenTitle = if (categoryFilterName != null) {
+        "WISDOM: ${categoryFilterName.uppercase()}"
+    } else {
+        "WISDOM LISTS"
+    }
+
+    val tabs = listOf("ALL", "Active", "Queued", "Completed")
+
+    val baseAllWisdom = (uiState as? MainViewModel.WisdomUiState.Success)?.allWisdomFlatList ?: emptyList()
+    val allWisdomToDisplay = remember(baseAllWisdom, categoryFilterName) {
+        if (categoryFilterName != null) baseAllWisdom.filter { it.category.equals(categoryFilterName, true) }
+        else baseAllWisdom
+    }
+
+    val baseActiveWisdom = (uiState as? MainViewModel.WisdomUiState.Success)?.activeWisdom ?: emptyList()
+    val activeWisdomToDisplay = remember(baseActiveWisdom, categoryFilterName) {
+        if (categoryFilterName != null) baseActiveWisdom.filter { it.category.equals(categoryFilterName, true) }
+        else baseActiveWisdom
+    }
+
+    val baseCompletedWisdom = (uiState as? MainViewModel.WisdomUiState.Success)?.completedWisdom ?: emptyList()
+    val completedWisdomToDisplay = remember(baseCompletedWisdom, categoryFilterName) {
+        if (categoryFilterName != null) baseCompletedWisdom.filter { it.category.equals(categoryFilterName, true) }
+        else baseCompletedWisdom
+    }
+
+    val baseFavoriteQueued = (uiState as? MainViewModel.WisdomUiState.Success)?.favoriteQueuedWisdom ?: emptyList()
+    val baseOtherQueued = (uiState as? MainViewModel.WisdomUiState.Success)?.otherQueuedWisdom ?: emptyList()
+    val baseSevenPlaylist = (uiState as? MainViewModel.WisdomUiState.Success)?.sevenWisdomPlaylist ?: emptyList()
+
+    val simpleQueuedListForCategoryFilter = remember(baseFavoriteQueued, baseOtherQueued, baseSevenPlaylist, categoryFilterName) {
+        if (categoryFilterName != null) {
+            (baseFavoriteQueued + baseOtherQueued + baseSevenPlaylist)
+                .distinctBy { it.id }
+                .filter {
+                    it.category.equals(categoryFilterName, true) &&
+                            !it.isActive && it.dateCompleted == null
+                }
+        } else {
+            null
+        }
+    }
+
+    val selectedCategoryForSevenWisdomState = (uiState as? MainViewModel.WisdomUiState.Success)?.selectedCategoryForSevenWisdom
+    val allCategoriesFromState = (uiState as? MainViewModel.WisdomUiState.Success)?.allCategories ?: emptyList()
+
     Box(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
-        contentAlignment = Alignment.Center
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DeepSpace)
+            .drawBehind {
+                drawRect(brush = Brush.verticalGradient(colors = listOf(CosmicBlack, DeepSpace)))
+                for (i in 0..100) {
+                    val x = (Math.random() * size.width).toFloat()
+                    val y = (Math.random() * size.height).toFloat()
+                    val radius = (Math.random() * 2f + 0.5f).toFloat()
+                    val alphaVal = (Math.random() * 0.8f + 0.2f).toFloat()
+                    drawCircle(color = StarWhite.copy(alpha = alphaVal), radius = radius, center = Offset(x, y))
+                }
+            }
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = StarWhite.copy(alpha = 0.8f),
-            textAlign = TextAlign.Center
+        Image(
+            painter = painterResource(id = R.drawable.ic_wisdom),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().alpha(0.1f).blur(20.dp)
         )
+
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = Color.Transparent,
+            contentColor = StarWhite,
+            topBar = {
+                TopAppBar(
+                    title = { Text(screenTitle, style = MaterialTheme.typography.headlineLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.Filled.ArrowBack, "Back", tint = StarWhite)
+                        }
+                    },
+                    actions = {
+                        if (categoryFilterName == null) {
+                            IconButton(onClick = onManageCategoriesClick) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_settings),
+                                    contentDescription = "Manage Categories",
+                                    tint = StarWhite
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = GlassSurface.copy(alpha = 0.5f),
+                        titleContentColor = StarWhite,
+                        navigationIconContentColor = StarWhite
+                    )
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = { showAddWisdomDialog = true },
+                    containerColor = NebulaPurple,
+                    contentColor = StarWhite
+                ) { Icon(Icons.Default.Add, "Add Wisdom") }
+            }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier.fillMaxSize().padding(paddingValues)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    placeholder = { Text("Search wisdom in this list") },
+                    leadingIcon = { Icon(Icons.Default.Search, "Search", tint = StarWhite.copy(alpha = 0.7f)) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, "Clear search", tint = StarWhite.copy(alpha = 0.7f))
+                            }
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CyberBlue,
+                        unfocusedBorderColor = StarWhite.copy(alpha = 0.5f),
+                        focusedTextColor = StarWhite,
+                        unfocusedTextColor = StarWhite,
+                        cursorColor = CyberBlue,
+                        focusedContainerColor = GlassSurface.copy(alpha = 0.3f),
+                        unfocusedContainerColor = GlassSurface.copy(alpha = 0.2f),
+                        focusedLabelColor = CyberBlue,
+                        unfocusedLabelColor = StarWhite.copy(alpha = 0.7f)
+                    ),
+                    shape = MaterialTheme.shapes.medium,
+                    singleLine = true
+                )
+
+                TabRow(
+                    selectedTabIndex = selectedTabIndex,
+                    containerColor = GlassSurface.copy(alpha = 0.3f),
+                    contentColor = StarWhite,
+                    indicator = { tabPositions ->
+                        if (selectedTabIndex < tabPositions.size) {
+                            TabRowDefaults.Indicator(
+                                modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
+                                color = when (selectedTabIndex) {
+                                    0 -> AccentOrange
+                                    1 -> ElectricGreen
+                                    2 -> NebulaPurple
+                                    else -> CyberBlue
+                                }
+                            )
+                        }
+                    }
+                ) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = selectedTabIndex == index,
+                            onClick = { selectedTabIndex = index },
+                            text = { Text(title.uppercase(), style = MaterialTheme.typography.bodyMedium) },
+                            selectedContentColor = when (index) {
+                                0 -> AccentOrange
+                                1 -> ElectricGreen
+                                2 -> NebulaPurple
+                                else -> CyberBlue
+                            },
+                            unselectedContentColor = StarWhite.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+
+                when (selectedTabIndex) {
+                    0 -> AllWisdomDisplayList(allWisdomToDisplay, onWisdomClick, searchQuery, viewModel)
+                    1 -> ActiveWisdomList(activeWisdomToDisplay, onWisdomClick, searchQuery, viewModel)
+                    2 -> {
+                        if (simpleQueuedListForCategoryFilter != null) {
+                            AllWisdomDisplayList(
+                                wisdomList = simpleQueuedListForCategoryFilter,
+                                onWisdomClick = onWisdomClick,
+                                searchQuery = searchQuery,
+                                viewModel = viewModel
+                            )
+                        } else {
+                            QueuedWisdomPlaylistsScreen(
+                                sevenWisdomPlaylist = baseSevenPlaylist,
+                                favoriteQueuedWisdom = baseFavoriteQueued,
+                                otherRandomQueuedWisdom = baseOtherQueued,
+                                selectedCategoryForSeven = selectedCategoryForSevenWisdomState,
+                                onWisdomClick = onWisdomClick,
+                                viewModel = viewModel,
+                                searchQuery = searchQuery,
+                                onSelectCategoryForSevenWisdom = {
+                                    showCategorySelectorForSevenWisdom = true
+                                }
+                            )
+                        }
+                    }
+                    3 -> CompletedWisdomList(completedWisdomToDisplay, onWisdomClick, { viewModel.activateWisdom(it) }, searchQuery, viewModel)
+                }
+            }
+        }
+
+        if (showAddWisdomDialog) {
+            val currentCategories = (uiState as? MainViewModel.WisdomUiState.Success)?.allCategories ?: emptyList()
+            AddWisdomDialog(
+                allExistingCategories = currentCategories,
+                onDismiss = { showAddWisdomDialog = false },
+                onSave = { text, source, category ->
+                    viewModel.addWisdom(text, source, category)
+                    showAddWisdomDialog = false
+                }
+            )
+        }
+
+        if (showCategorySelectorForSevenWisdom) {
+            CategorySelectorDialog(
+                allCategories = allCategoriesFromState,
+                currentSelectedCategory = selectedCategoryForSevenWisdomState,
+                onDismiss = { showCategorySelectorForSevenWisdom = false },
+                onCategorySelected = { category ->
+                    viewModel.setCategoryForSevenWisdomPlaylist(category)
+                    showCategorySelectorForSevenWisdom = false
+                }
+            )
+        }
     }
 }
