@@ -24,6 +24,7 @@ interface IWisdomRepository {
     suspend fun activateWisdom(wisdomId: Long): Result<Boolean>
     suspend fun getActiveWisdomDirect(): Result<List<Wisdom>>
     suspend fun updateFavoriteStatus(wisdomId: Long, isFavorite: Boolean): Result<Boolean> // New
+    suspend fun deactivateWisdom(wisdomId: Long): Result<Boolean> // New
 
 
     // Search and categorization

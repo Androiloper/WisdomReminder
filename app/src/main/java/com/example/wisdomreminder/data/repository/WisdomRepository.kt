@@ -146,7 +146,8 @@ class WisdomRepository @Inject constructor(
                         currentDay = 1,
                         exposuresToday = 0,
                         exposuresTotal = 0,
-                        dateCompleted = null
+                        dateCompleted = null,
+                        orderIndex = 0 // Explicitly reset orderIndex on activation
                     )
                     wisdomDao.updateWisdom(updatedWisdom)
                     Log.d(TAG, "Used direct entity update to activate wisdom: $wisdomId")
@@ -165,6 +166,30 @@ class WisdomRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    @Transaction
+    override suspend fun deactivateWisdom(wisdomId: Long): Result<Boolean> {
+        return try {
+            val rowsUpdated = wisdomDao.deactivateWisdom(wisdomId)
+            if (rowsUpdated > 0) {
+                Log.d(TAG, "Successfully deactivated wisdom: $wisdomId, rows updated: $rowsUpdated")
+                val deactivatedWisdom = wisdomDao.getWisdomById(wisdomId)
+                if (deactivatedWisdom?.isActive == false) {
+                    Result.success(true)
+                } else {
+                    Log.e(TAG, "Deactivation verification failed for wisdom: $wisdomId. isActive is ${deactivatedWisdom?.isActive}")
+                    Result.failure(Exception("Deactivation verification failed for wisdom $wisdomId"))
+                }
+            } else {
+                Log.w(TAG, "No rows updated during deactivation for wisdom ID: $wisdomId. Item might not exist or was not active.")
+                Result.failure(Exception("Wisdom with ID $wisdomId not found or not active for deactivation."))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error deactivating wisdom: $wisdomId", e)
+            Result.failure(e)
+        }
+    }
+
 
     override suspend fun updateFavoriteStatus(wisdomId: Long, isFavorite: Boolean): Result<Boolean> { // New
         return try {

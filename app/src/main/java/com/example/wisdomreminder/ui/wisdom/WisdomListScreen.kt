@@ -83,7 +83,7 @@ fun SimplifiedWisdomRow(
     wisdom: Wisdom,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
-    viewModel: MainViewModel
+    viewModel: MainViewModel // Added viewModel
 ) {
     GlassCard(modifier = Modifier
         .fillMaxWidth()
@@ -212,7 +212,8 @@ fun ActiveWisdomList(
                 ActiveWisdomItemSimplified(
                     wisdom = item,
                     onClick = { onWisdomClick(item.id) },
-                    onToggleFavorite = { viewModel.toggleFavoriteStatus(item.id) }
+                    onToggleFavorite = { viewModel.toggleFavoriteStatus(item.id) },
+                    onDeactivate = { viewModel.deactivateWisdom(item.id) } // Added deactivate callback
                 )
             }
         }
@@ -223,7 +224,8 @@ fun ActiveWisdomList(
 fun ActiveWisdomItemSimplified(
     wisdom: Wisdom,
     onClick: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    onDeactivate: () -> Unit // New callback
 ) {
     GlassCard(
         modifier = Modifier
@@ -297,12 +299,29 @@ fun ActiveWisdomItemSimplified(
                         overflow = TextOverflow.Ellipsis
                     )
                 } else {
-                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.weight(1f)) // Occupy space if source is blank
                 }
+
+                // Deactivate Button
+                Button(
+                    onClick = onDeactivate,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AccentOrange.copy(alpha = 0.8f),
+                        contentColor = StarWhite
+                    ),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.align(Alignment.CenterVertically)
+                ) {
+                    Icon(Icons.Filled.Info, contentDescription = "Deactivate", modifier = Modifier.size(16.dp)) // Icon STOP
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("DEACTIVATE", style = MaterialTheme.typography.labelSmall)
+                }
+
                 Text(
                     text = wisdom.category,
                     style = MaterialTheme.typography.bodySmall,
-                    color = StarWhite.copy(alpha = 0.7f)
+                    color = StarWhite.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(start = 8.dp) // Ensure category is visible
                 )
             }
         }

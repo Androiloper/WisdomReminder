@@ -39,7 +39,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
+//import androidx.compose.material.icons.filled.Stop // Import Stop icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -327,13 +329,29 @@ fun WisdomItemDetailContent(
                         ) {
                             Icon(painter = painterResource(id = R.drawable.ic_close), contentDescription = "Exit Reading Mode")
                         }
-                    } else if (!wisdom.isActive) {
+                    } else if (wisdom.isActive) { // Show Deactivate if active
+                        FloatingActionButton(
+                            onClick = { viewModel.deactivateWisdom(wisdom.id) },
+                            containerColor = AccentOrange.copy(alpha = 0.9f), // Or another distinct color
+                            contentColor = StarWhite
+                        ) {
+                            Icon(Icons.Filled.Info, contentDescription = "Deactivate Wisdom") // STOP Icon
+                        }
+                    } else if (!wisdom.isActive && wisdom.dateCompleted == null) { // Show Activate if queued
                         FloatingActionButton(
                             onClick = { viewModel.activateWisdom(wisdom.id) },
                             containerColor = NebulaPurple,
                             contentColor = StarWhite
                         ) {
                             Icon(Icons.Default.PlayArrow, contentDescription = "Activate Wisdom")
+                        }
+                    } else if (wisdom.dateCompleted != null) { // Show Reactivate if completed
+                        FloatingActionButton(
+                            onClick = { viewModel.activateWisdom(wisdom.id) }, // Same action as activate for now
+                            containerColor = CyberBlue.copy(alpha = 0.8f),
+                            contentColor = StarWhite
+                        ) {
+                            Icon(painterResource(id = R.drawable.ic_replay), contentDescription = "Reactivate Wisdom")
                         }
                     }
                 }
@@ -471,25 +489,7 @@ fun WisdomItemDetailContent(
                             }
                         }
 
-                        if (!wisdom.isActive) {
-                            GlassCard(modifier = Modifier.fillMaxWidth()) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("ACTIONS", style = MaterialTheme.typography.titleMedium, color = ElectricGreen)
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Button(
-                                        onClick = { viewModel.activateWisdom(wisdom.id) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = NebulaPurple),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(if (wisdom.dateCompleted != null) "REACTIVATE" else "ACTIVATE", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Activating this wisdom will begin the 21/21 rule process.", style = MaterialTheme.typography.bodySmall, color = StarWhite.copy(alpha = 0.7f), textAlign = TextAlign.Center)
-                                }
-                            }
-                        }
+                        // Action buttons section is now handled by the FAB based on state
                     }
                 }
                 AnimatedVisibility(visible = !isReadingMode) {

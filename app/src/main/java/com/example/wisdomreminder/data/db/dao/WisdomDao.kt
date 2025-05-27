@@ -103,4 +103,8 @@ interface WisdomDao {
     // For updating favorite status
     @Query("UPDATE wisdom SET isFavorite = :isFavorite WHERE id = :wisdomId")
     suspend fun updateFavoriteStatus(wisdomId: Long, isFavorite: Boolean)
+
+    // New method for deactivating wisdom
+    @Query("UPDATE wisdom SET isActive = 0, startDate = NULL, currentDay = 0, exposuresToday = 0, exposuresTotal = 0, dateCompleted = NULL, lastExposureTime = NULL, orderIndex = (SELECT IFNULL(MAX(orderIndex), -1) + 1 FROM wisdom WHERE isActive = 0 AND dateCompleted IS NULL AND category = (SELECT category FROM wisdom WHERE id = :wisdomId)) WHERE id = :wisdomId")
+    suspend fun deactivateWisdom(wisdomId: Long): Int
 }

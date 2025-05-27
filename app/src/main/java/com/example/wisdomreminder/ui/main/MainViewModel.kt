@@ -150,6 +150,7 @@ class MainViewModel @Inject constructor(
         object WisdomDeleted : UiEvent()
         object WisdomUpdated : UiEvent()
         object WisdomActivated : UiEvent()
+        object WisdomDeactivated : UiEvent() // New event
         object WisdomFavorited : UiEvent()
         object CategoryCardAdded : UiEvent()
         object CategoryCardRemoved : UiEvent()
@@ -475,6 +476,27 @@ class MainViewModel @Inject constructor(
             }
         }
     }
+
+    fun deactivateWisdom(wisdomId: Long) { // New function
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                wisdomRepository.deactivateWisdom(wisdomId).fold(
+                    onSuccess = {
+                        _events.emit(UiEvent.WisdomDeactivated)
+                        if (_selectedWisdom.value?.id == wisdomId) {
+                            getWisdomById(wisdomId) // Refresh to show updated state
+                        }
+                    },
+                    onFailure = { error ->
+                        _events.emit(UiEvent.Error("Failed to deactivate wisdom: ${error.localizedMessage}"))
+                    }
+                )
+            } catch (e: Exception) {
+                _events.emit(UiEvent.Error("An unexpected error occurred while deactivating: ${e.localizedMessage}"))
+            }
+        }
+    }
+
     fun toggleFavoriteStatus(wisdomId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             val wisdomResult = wisdomRepository.getWisdomById(wisdomId)
